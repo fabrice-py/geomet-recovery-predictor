@@ -55,6 +55,7 @@ class Stream:
     assays: dict = field(default_factory=dict)   # {element: %} reconstruit par stoechio
     water_tph: float = 0.0
     pulp_sg: float = 0.0
+    solid_sg: float = 0.0
 
     def total_tph(self) -> float:
         """Debit total de pulpe (solides + eau)."""
@@ -67,6 +68,37 @@ class Stream:
         return (f"[{self.name}] {self.solids_tph:.1f} t/h solides | "
                 f"P80={self.p80_um:.0f} µm | pulpe {self.pct_solids_mass:.0f}% sol. | "
                 f"top: {top_str}")
+    
+    def close_pulp(self, mineral_density: dict, rho_water: float = 1.0):
+        """
+        Fermeture de l'état pulpe du flux, car un flux réel est de la matière dans de
+        l'eau : ainsi on calcule la densité du solide (loi de mélange), le débit d'eau
+        (déduit du % solides) puis la densité de pulpe (masse totale / volume total).
+
+        mineral_density : dict {mineral: densité g/cm3}, fourni par l'appelant, car la
+        structure reste découplée de la base de propriétés.
+        """
+        # Densité du solide par loi de mélange, car les minéraux ont des densités
+        # différentes : ainsi 1/rho_s = somme des (fraction massique / densité).
+        w = {m: self.modal[m] / 100.0 for m in self.modal}
+        inv_rho_s = sum(w[m] / mineral_density[m] for m in w)
+        rho_s = 1.0 / inv_rho_s
+
+        # Débit d'eau déduit du % solides massique, car % solides = solides/(solides+eau) :
+        # ainsi eau = solides * (1/(pct/100) - 1).
+        self.water_tph = self.solids_tph * (1.0 / (self.pct_solids_mass / 100.0) - 1.0)
+
+        # Densité de pulpe = masse totale / volume total, car chaque volume vaut
+        # masse/densité : ainsi une pulpe de minerai lourd sort plus dense.
+        v_solids = self.solids_tph / rho_s
+        v_water = self.water_tph / rho_water
+        self.pulp_sg = (self.solids_tph + self.water_tph) / (v_solids + v_water)
+
+        # On mémorise aussi la densité du solide, car elle resservira en gravimétrie.
+        self.solid_sg = round(rho_s, 3)
+        self.water_tph = round(self.water_tph, 2)
+        self.pulp_sg = round(self.pulp_sg, 3)
+        return self
 
 
 if __name__ == "__main__":
