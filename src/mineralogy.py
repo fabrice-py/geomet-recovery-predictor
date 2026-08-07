@@ -20,6 +20,7 @@ MINERALS = {
     "pyrite_co":       {"Fe": 0.465, "S": 0.535, "Co": 0.010},  # FeS2 cobaltifere
     "arsenopyrite":    {"Fe": 0.343, "As": 0.460, "S": 0.197},  # FeAsS
     "gangue_silicate": {"SiO2": 0.900},                         # albite/silicates
+    "galena":          {"Pb": 0.866, "S": 0.134},              # PbS
 }
 
 # --- Profils de minerai : les "types" sont de la donnee -----------------------
@@ -38,6 +39,12 @@ ORE_PROFILES = {
         "gold_bearing": True,
         "au_gt_range":  (0.5, 8.0),                   # or a l'alimentation (g/t)
         "au_hosts":     ["arsenopyrite", "pyrite_co"],# sulfures piegeant l'or
+    },
+    "polymetallic_pb_cu_zn": {
+        "minerals":     ["galena", "chalcopyrite", "sphalerite", "pyrite_co",
+                         "gangue_silicate"],
+        "modal_alpha":  [0.5, 0.6, 0.9, 1.0, 12.0],
+        "gold_bearing": False,
     },
 }
 

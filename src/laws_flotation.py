@@ -32,16 +32,26 @@ def rotor_bell_factor(rpm, rpm_opt=1200.0, width=350.0):
     """
     return math.exp(-((rpm - rpm_opt) ** 2) / (2 * width ** 2))
 
-def effective_floatability(mineral, collector_type):
+def effective_floatability(mineral, unit_settings):
     """
-    Flottabilité effective selon le collecteur, car un collecteur cible des minéraux
-    précis : ainsi un xanthate rend flottables les sulfures (flottabilité native de la
-    base), tandis qu'une amine rend flottable la gangue silicatée et rien d'autre.
+    Flottabilité effective d'un minéral selon le collecteur et les modificateurs, car la
+    sélectivité d'un circuit différentiel se pilote minéral par minéral : ainsi tout
+    minéral listé comme déprimé est écrasé et tout minéral listé comme activé est rendu
+    fortement flottable, quel qu'il soit (sphalérite, galène, pyrite...).
     """
-    if collector_type == "amine_inverse":
-        if mineral in ("quartz", "gangue_silicate"):
-            return 0.85
-        return 0.05
+    collector = unit_settings["collector_type"]
+
+    # Flottation inverse : seule la gangue silicatée flotte.
+    if collector == "amine_inverse":
+        return 0.85 if mineral in ("quartz", "gangue_silicate") else 0.05
+
+    # Dépression / activation génériques, car elles priment sur la flottabilité native :
+    # ainsi on interroge les listes fournies par l'étage plutôt qu'un minéral en dur.
+    if mineral in unit_settings.get("depressed_minerals", []):
+        return 0.05                          # déprimé : reste au fond
+    if mineral in unit_settings.get("activated_minerals", []):
+        return 0.90                          # activé : flotte comme un bon sulfure
+
     return MINERAL_PROPERTIES[mineral]["floatability"]
 
 
@@ -73,7 +83,7 @@ def flotation_recovery(stream, unit):
 
     recovery = {}
     for m in stream.modal:
-        floatab = effective_floatability(m, collector)
+        floatab = effective_floatability(m, s)
         rmax = min(0.98, 0.02 + 0.95 * (floatab ** 2) + rmax_bonus)
         k = (0.15 + 1.60 * floatab) * dose_factor * bell
 
@@ -111,33 +121,24 @@ def gold_flotation_recovery(stream, mineral_recovery, unit):
     return round(refr * host_recovery + (1 - refr) * free_gold_recovery, 4)
 
 if __name__ == "__main__":
+    # Test : flottation directe d'un minerai polymétallique, car on veut voir les
+    # sulfures (chalcopyrite en tête) monter dans la mousse et la gangue rester au rejet.
     from feed_generator import generate_feed
     from separation import separate, SeparationUnit
 
-    # 1. Flottation directe du polymétallique à deux pH, car on veut voir la pyrite
-    #    se faire déprimer quand le pH monte (sélectivité chalcopyrite / pyrite).
     flux = generate_feed("polymetallic_refractory_au", n_samples=1, seed=3)[0]
-    print(f"Or à l'alimentation : {flux.assays['Au_gt']} g/t "
-          f"(réfractaire {flux.assays['Au_refractory_frac']*100:.0f} %)\n")
+    print("Alimentation (minéralogie) :")
+    for m, p in sorted(flux.modal.items(), key=lambda kv: kv[1], reverse=True):
+        print(f"  {m:16s} {p:5.1f} %   (flottabilité {MINERAL_PROPERTIES[m]['floatability']})")
 
-    for ph in [9.0, 11.5]:
-        unit = SeparationUnit("flotation", {"collector_type": "xanthate_SIBX",
-                                            "collector_gpt": 100, "pulp_ph": ph,
-                                            "residence_min": 8, "rotor_speed_rpm": 1200})
-        reco = flotation_recovery(flux, unit)
-        au_reco = gold_flotation_recovery(flux, reco, unit)
-        conc, rejet = separate(flux, reco, gold_recovery=au_reco)
-        print(f"pH {ph:>4} | pyrite={reco['pyrite_co']*100:4.0f}% "
-              f"chalco={reco['chalcopyrite']*100:4.0f}% | Au récup={au_reco*100:4.0f}% | "
-              f"conc {conc.solids_tph:4.1f} t/h à Au={conc.assays.get('Au_gt', 0):.1f} g/t")
+    unit = SeparationUnit("flotation", {"collector_gpt": 100, "residence_min": 8,
+                                        "rotor_speed_rpm": 1200})
+    reco = flotation_recovery(flux, unit)
+    print("\nRécupération par minéral (flottation directe) :")
+    for m, r in sorted(reco.items(), key=lambda kv: kv[1], reverse=True):
+        print(f"  {m:16s} {r*100:5.1f} %")
 
-    # 2. Flottation inverse d'un minerai de fer, car on veut voir la silice partir dans
-    #    la mousse (rejet) et l'hématite rester au concentré.
-    print()
-    flux_fe = generate_feed("iron_flotation", n_samples=1, seed=1)[0]
-    unit_inv = SeparationUnit("flotation", {"collector_type": "amine_inverse"})
-    reco_inv = flotation_recovery(flux_fe, unit_inv)
-    conc_fe, rejet_fe = separate(flux_fe, reco_inv)
-    print(f"Inverse (amine) | Fe alim={flux_fe.assays['Fe']:.1f}% -> "
-          f"conc {conc_fe.solids_tph:.1f} t/h à Fe={conc_fe.assays['Fe']:.1f}% "
-          f"(quartz récup conc={reco_inv['quartz']*100:.0f}%)")
+    conc, rejet = separate(flux, reco)
+    print(f"\nCu alimentation : {flux.assays.get('Cu', 0):.2f} %")
+    print(f"Cu concentré    : {conc.assays.get('Cu', 0):.2f} %   (masse {conc.solids_tph:.1f} t/h)")
+    print(f"Cu rejet        : {rejet.assays.get('Cu', 0):.2f} %")

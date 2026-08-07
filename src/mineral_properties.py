@@ -23,6 +23,7 @@ MINERAL_PROPERTIES = {
     "pyrite_co":       {"density": 5.00, "magnetic": "paramagnetique_faible","floatability": 0.60},
     "arsenopyrite":    {"density": 6.00, "magnetic": "paramagnetique",       "floatability": 0.60},
     "gangue_silicate": {"density": 2.65, "magnetic": "diamagnetique",        "floatability": 0.10},
+    "galena":          {"density": 7.50, "magnetic": "diamagnetique",        "floatability": 0.85},
 }
 
 

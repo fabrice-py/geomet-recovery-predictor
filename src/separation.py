@@ -52,6 +52,8 @@ SEPARATION_SPECS = {
         "pulp_ph": {"min": 6.0, "max": 12.0, "default": 9.0},
         "residence_min": {"min": 2.0, "max": 20.0, "default": 8.0},
         "rotor_speed_rpm": {"min": 800.0, "max": 1800.0, "default": 1200.0},
+        "depressed_minerals": {"default": []},
+        "activated_minerals": {"default": []},
     },
 }
 
@@ -119,6 +121,8 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
 
     def build(mass_dict, name, au_grams):
         total = sum(mass_dict.values())
+        # Reconstruction de la minéralogie du flux de sortie, car les proportions changent
+        # après tri : ainsi on renormalise, en gérant le cas d'un flux vide.
         if total <= 1e-9:
             modal = {m: 0.0 for m in minerals}
             assays = {}
@@ -130,30 +134,6 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
             # riche en sulfures aura une teneur en or bien plus élevée que l'alimentation.
             if au_grams > 0:
                 assays["Au_gt"] = round(au_grams / total, 3)
-        lib = LiberationState(degree=dict(stream.liberation.degree))
-        return Stream(
-            name=f"{stream.name}_{name}",
-            solids_tph=round(total, 4),
-            modal=modal,
-            liberation=lib,
-            p80_um=stream.p80_um,
-            pct_solids_mass=stream.pct_solids_mass,
-            assays=assays,
-        )
-
-    return (build(conc_mass, conc_name, au_conc_g),
-            build(tail_mass, tail_name, au_tail_g))
-
-    def build(mass_dict, name):
-        total = sum(mass_dict.values())
-        # Reconstruction de la minéralogie du flux de sortie, car les proportions
-        # changent après tri : ainsi on renormalise, en gérant le cas d'un flux vide.
-        if total <= 1e-9:
-            modal = {m: 0.0 for m in minerals}
-            assays = {}
-        else:
-            modal = {m: round(mass_dict[m] / total * 100.0, 4) for m in minerals}
-            assays = assays_from_modal(modal)
         # La libération est portée telle quelle vers les deux produits (simplification
         # Option A), car son EFFET sur le tri est déjà pris en compte dans la loi de
         # récupération : ainsi la machinerie ne fait que déplacer la masse.
@@ -168,7 +148,8 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
             assays=assays,
         )
 
-    return build(conc_mass, conc_name), build(tail_mass, tail_name)
+    return (build(conc_mass, conc_name, au_conc_g),
+            build(tail_mass, tail_name, au_tail_g))
 
 
 if __name__ == "__main__":
