@@ -32,6 +32,15 @@ ORE_PROFILES = {
         "modal_alpha":  [6.0, 2.0, 4.0],
         "gold_bearing": False,
     },
+"iron_flotation_vale": {
+        # Profil cale sur les teneurs REELLES de l'usine sur toute la periode (~54.7 % Fe,
+        # ~16.5 % SiO2), car les premieres lignes du fichier ne montraient qu'une fenetre
+        # non representative : ainsi on cale sur les 307 mesures distinctes, plus pauvres et
+        # plus variables. Mineralogie inferee des teneurs (Fe = hematite, SiO2 = quartz).
+        "minerals":     ["hematite", "magnetite", "quartz"],
+        "modal_alpha":  [30.0, 2.0, 7.0],
+        "gold_bearing": False,
+    },
     "polymetallic_refractory_au": {
         "minerals":     ["chalcopyrite", "sphalerite", "pyrite_co",
                          "arsenopyrite", "gangue_silicate"],
@@ -47,7 +56,6 @@ ORE_PROFILES = {
         "gold_bearing": False,
     },
 }
-
 
 def assays_from_modal(modal: dict) -> dict:
     """
