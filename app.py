@@ -4,10 +4,11 @@ Interface web du simulateur geometallurgique (Streamlit).
 
 Minerai : trois modes (profil predefini, mineralogie composee depuis la base, mineraux
 personnalises hors base). Traitement : separation SIMPLE (une unite) ou CIRCUIT multi-etages
-(flottation differentielle predefinie). Les circuits fonctionnent sur profils/base, car la
-propagation des proprietes custom a travers un circuit reste a faire (V3.5).
+COMPOSABLE (l'utilisateur decrit ses etages : nom, collecteur, pH, mineraux deprimes/actives).
+Un modele de circuit predefini pre-remplit le tableau, que l'utilisateur peut modifier.
 
-L'interface ne fait qu'habiller la logique de src/ (principe logique/presentation separe).
+Les circuits fonctionnent sur profils/base, car la propagation des proprietes custom a
+travers un circuit reste a faire (V3.5). L'interface habille la logique de src/.
 """
 
 import sys
@@ -24,7 +25,7 @@ from separation import SeparationUnit, SEPARATION_SPECS, separate
 from laws_gravity import gravity_recovery, gravity_cutpoint
 from laws_magnetic import magnetic_recovery, magnetic_cutpoint
 from laws_flotation import flotation_recovery, gold_flotation_recovery
-from circuit_cu_zn import run_differential_circuit, build_stages
+from circuit_cu_zn import run_differential_circuit
 
 
 XRF_ELEMENTS = [
@@ -34,30 +35,36 @@ XRF_ELEMENTS = [
 MAGNETIC_CATEGORIES = ["ferromagnetique", "paramagnetique",
                        "paramagnetique_faible", "diamagnetique"]
 
-# Circuits predefinis, decrits comme DONNEE (liste d'etages), car un circuit differentiel
-# n'est qu'une sequence d'etages avec leur chimie : ainsi on reutilise run_differential_circuit.
-CIRCUITS_PREDEFINIS = {
-    "Differentiel Cu -> Zn": [
-        {"name": "Cu", "pulp_ph": 9.0,  "collector_gpt": 100,
-         "depressed_minerals": ["sphalerite"]},
-        {"name": "Zn", "pulp_ph": 10.5, "collector_gpt": 120,
-         "activated_minerals": ["sphalerite"]},
-    ],
-    "Differentiel Pb -> Cu -> Zn": [
-        {"name": "Pb", "pulp_ph": 8.5,  "collector_gpt": 80,
-         "depressed_minerals": ["sphalerite", "chalcopyrite", "pyrite_co"]},
-        {"name": "Cu", "pulp_ph": 9.5,  "collector_gpt": 100,
-         "depressed_minerals": ["sphalerite", "pyrite_co"]},
-        {"name": "Zn", "pulp_ph": 10.5, "collector_gpt": 120,
-         "activated_minerals": ["sphalerite"]},
-    ],
+# Modeles de circuit pour PRE-REMPLIR le tableau editable, car partir d'un exemple aide
+# l'utilisateur : ainsi il modifie une base plutot que de tout saisir de zero.
+CIRCUIT_TEMPLATES = {
+    "Vierge (2 etages)": pd.DataFrame([
+        {"name": "etage_1", "collector_gpt": 100.0, "pulp_ph": 9.0,
+         "depressed_minerals": "", "activated_minerals": ""},
+        {"name": "etage_2", "collector_gpt": 100.0, "pulp_ph": 10.0,
+         "depressed_minerals": "", "activated_minerals": ""},
+    ]),
+    "Differentiel Cu -> Zn": pd.DataFrame([
+        {"name": "Cu", "collector_gpt": 100.0, "pulp_ph": 9.0,
+         "depressed_minerals": "sphalerite", "activated_minerals": ""},
+        {"name": "Zn", "collector_gpt": 120.0, "pulp_ph": 10.5,
+         "depressed_minerals": "", "activated_minerals": "sphalerite"},
+    ]),
+    "Differentiel Pb -> Cu -> Zn": pd.DataFrame([
+        {"name": "Pb", "collector_gpt": 80.0, "pulp_ph": 8.5,
+         "depressed_minerals": "sphalerite, chalcopyrite, pyrite_co", "activated_minerals": ""},
+        {"name": "Cu", "collector_gpt": 100.0, "pulp_ph": 9.5,
+         "depressed_minerals": "sphalerite, pyrite_co", "activated_minerals": ""},
+        {"name": "Zn", "collector_gpt": 120.0, "pulp_ph": 10.5,
+         "depressed_minerals": "", "activated_minerals": "sphalerite"},
+    ]),
 }
 
 
 st.set_page_config(page_title="Simulateur geometallurgique", layout="wide")
 st.title("Simulateur geometallurgique de separation")
-st.caption("Choisissez un minerai, un traitement (separation simple ou circuit) et ses "
-           "reglages : l'outil predit les concentres, le rejet et les teneurs.")
+st.caption("Choisissez un minerai, un traitement (separation simple ou circuit compose) "
+           "et ses reglages : l'outil predit les concentres, le rejet et les teneurs.")
 
 
 # ============================ BARRE LATERALE : MINERAI ============================
@@ -92,8 +99,8 @@ elif mode_minerai == "Mineralogie (base)":
 else:
     use_custom_minerals = True
     st.sidebar.markdown("**Mineraux personnalises**")
-    st.sidebar.caption("Definissez vos phases dans la zone principale, puis reglez le "
-                       "traitement ici. (Non disponible pour les circuits en V3-A.)")
+    st.sidebar.caption("Definissez vos phases dans la zone principale. "
+                       "(Non disponible pour les circuits.)")
 
 p80 = st.sidebar.slider("P80 (um) - finesse de broyage", 45.0, 300.0, 150.0, step=5.0)
 liberation_deg = st.sidebar.slider("Degre de liberation moyen", 0.0, 1.0, 0.85, step=0.05)
@@ -105,13 +112,12 @@ traitement = st.sidebar.radio("Type", ["Separation simple", "Circuit"])
 
 unit_type = None
 settings = {}
-circuit_name = None
+template_name = None
 
 if traitement == "Separation simple":
     st.sidebar.subheader("Voie de separation")
     voies = ["shaking_table", "spiral", "falcon", "magnetic", "flotation"]
     unit_type = st.sidebar.selectbox("Type d'unite", options=voies)
-
     st.sidebar.subheader("Reglages machine")
     for param, rule in SEPARATION_SPECS[unit_type].items():
         if param.startswith("_"):
@@ -123,16 +129,15 @@ if traitement == "Separation simple":
             settings[param] = st.sidebar.slider(
                 param, float(rule["min"]), float(rule["max"]), float(rule["default"]))
 else:
-    st.sidebar.subheader("Circuit predefini")
-    circuit_name = st.sidebar.selectbox("Circuit", options=list(CIRCUITS_PREDEFINIS.keys()))
-    if use_custom_minerals:
-        st.sidebar.error("Les circuits ne sont pas disponibles pour les mineraux "
-                         "personnalises en V3-A. Choisissez un profil ou la mineralogie de base.")
+    st.sidebar.subheader("Circuit compose")
+    template_name = st.sidebar.selectbox("Partir d'un modele", options=list(CIRCUIT_TEMPLATES.keys()))
+    st.sidebar.caption("Le tableau des etages s'edite dans la zone principale a droite.")
+
 
 lancer = st.sidebar.button("Lancer", type="primary")
 
 
-# ============================ ZONE PRINCIPALE : SAISIE CUSTOM ============================
+# ============================ ZONE PRINCIPALE : SAISIE CUSTOM MINERAL ============================
 custom_props = None
 custom_chem = None
 if use_custom_minerals:
@@ -165,7 +170,21 @@ if use_custom_minerals:
                        f"(attendu ~100 %). Verifiez la composition.")
 
 
-# ============================ AIGUILLAGE (separation simple) ============================
+# ============================ ZONE PRINCIPALE : COMPOSITION DU CIRCUIT ============================
+circuit_editor = None
+if traitement == "Circuit":
+    st.header("Composition du circuit")
+    st.markdown("**Chaque ligne est un etage de flottation**, applique en serie (le rejet "
+                "d'un etage alimente le suivant). Pour deprimer ou activer des mineraux, "
+                "saisissez leurs noms separes par des virgules "
+                "(ex. `sphalerite, pyrite_co`).")
+    st.caption("Mineraux disponibles : " + ", ".join(MINERALS.keys()))
+    circuit_editor = st.data_editor(
+        CIRCUIT_TEMPLATES[template_name], num_rows="dynamic", use_container_width=True,
+        key="circuit_editor")
+
+
+# ============================ FONCTIONS ============================
 def apply_unit_ui(stream, unit, prop_lookup=None, assay_func=None):
     """Aiguillage vers la bonne loi selon la voie, avec proprietes et chimie custom."""
     if unit.unit_type in ("shaking_table", "spiral", "falcon"):
@@ -180,6 +199,32 @@ def apply_unit_ui(stream, unit, prop_lookup=None, assay_func=None):
         reco = flotation_recovery(stream, unit, mineral_props=prop_lookup)
         au = gold_flotation_recovery(stream, reco, unit)
         return separate(stream, reco, gold_recovery=au, assay_func=assay_func)
+
+
+def parse_minerals(cell):
+    """Transforme 'sphalerite, pyrite_co' en liste ['sphalerite','pyrite_co'], car le
+    tableau saisit du texte : ainsi on decoupe sur les virgules en nettoyant les espaces."""
+    if cell is None or (isinstance(cell, float) and pd.isna(cell)):
+        return []
+    return [m.strip() for m in str(cell).split(",") if m.strip()]
+
+
+def editor_to_stage_configs(df):
+    """Transforme le tableau editable en liste d'etages pour run_differential_circuit,
+    car le moteur attend des dicts : ainsi on convertit chaque ligne, listes comprises."""
+    configs = []
+    for _, r in df.iterrows():
+        name = str(r.get("name", "")).strip()
+        if not name:
+            continue
+        configs.append({
+            "name": name,
+            "collector_gpt": float(pd.to_numeric(r.get("collector_gpt"), errors="coerce") or 100.0),
+            "pulp_ph": float(pd.to_numeric(r.get("pulp_ph"), errors="coerce") or 9.0),
+            "depressed_minerals": parse_minerals(r.get("depressed_minerals")),
+            "activated_minerals": parse_minerals(r.get("activated_minerals")),
+        })
+    return configs
 
 
 def build_feed():
@@ -246,13 +291,12 @@ def build_feed():
 
 
 def show_teneurs(streams_named, feed):
-    """Affiche un tableau de teneurs avec une colonne par flux (alimentation + produits)."""
+    """Tableau de teneurs avec une colonne par flux (alimentation + produits)."""
     all_elements = set(feed.assays)
     for _, s in streams_named:
         all_elements |= set(s.assays)
-    elements = sorted(all_elements)
     rows = []
-    for el in elements:
+    for el in sorted(all_elements):
         row = {"Element": el, "Alimentation": round(feed.assays.get(el, 0), 3)}
         for name, s in streams_named:
             row[name] = round(s.assays.get(el, 0), 3)
@@ -277,22 +321,20 @@ if lancer:
         c1.metric("Alimentation", f"{feed.solids_tph:.0f} t/h")
         c2.metric("Concentre", f"{conc.solids_tph:.1f} t/h")
         c3.metric("Rejet", f"{rejet.solids_tph:.1f} t/h")
-
         st.subheader("Teneurs (%)")
         show_teneurs([("Concentre", conc), ("Rejet", rejet)], feed)
         st.caption(f"Voie : {unit_type} | P80 : {feed.p80_um:.0f} um | "
                    f"Liberation : {liberation_deg:.2f}")
 
     else:  # Circuit
-        if use_custom_minerals:
-            st.error("Les circuits ne sont pas disponibles pour les mineraux personnalises "
-                     "en V3-A. Choisissez un profil ou la mineralogie de base.")
+
+        stage_configs = editor_to_stage_configs(circuit_editor)
+        if len(stage_configs) == 0:
+            st.error("Definissez au moins un etage (avec un nom) dans le tableau du circuit.")
             st.stop()
 
-        stage_configs = CIRCUITS_PREDEFINIS[circuit_name]
-        result = run_differential_circuit(feed, stage_configs)
-
-        # Affichage des concentres successifs + rejet final.
+        result = run_differential_circuit(feed, stage_configs,
+                                          prop_lookup=prop_lookup, assay_func=assay_func)
         concentrates = result["concentrates"]
         tail = result["final_tail"]
 
@@ -307,11 +349,11 @@ if lancer:
         streams_named.append(("Rejet final", tail))
         show_teneurs(streams_named, feed)
 
-        # Controle de conservation de la masse.
         total_out = sum(c.solids_tph for c in concentrates.values()) + tail.solids_tph
-        st.caption(f"Circuit : {circuit_name} | Conservation masse : {total_out:.1f} t/h "
-                   f"(alimentation {feed.solids_tph:.0f} t/h)")
+        n_etages = len(stage_configs)
+        st.caption(f"Circuit compose : {n_etages} etage(s) | Conservation masse : "
+                   f"{total_out:.1f} t/h (alimentation {feed.solids_tph:.0f} t/h)")
 else:
-    if not use_custom_minerals:
+    if not use_custom_minerals and traitement != "Circuit":
         st.info("Configurez le minerai et le traitement dans la barre laterale, "
                 "puis cliquez sur **Lancer**.")

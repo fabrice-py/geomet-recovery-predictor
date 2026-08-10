@@ -14,32 +14,34 @@ from laws_magnetic import magnetic_recovery, magnetic_cutpoint
 from laws_flotation import flotation_recovery, gold_flotation_recovery
 
 
-def apply_unit(stream, unit, conc_name="concentre", tail_name="rejet"):
+def apply_unit(stream, unit, conc_name="concentre", tail_name="rejet",  prop_lookup=None, assay_func=None):
     """
     Application d'une unité à un flux, car chaque voie a sa propre loi : ainsi on aiguille
     vers la bonne physique selon le type d'unité, puis on partage le flux en conséquence.
     """
     if unit.unit_type in ("shaking_table", "spiral", "falcon"):
         d50, ep = gravity_cutpoint(unit)
-        reco = gravity_recovery(stream, d50, ep)
-        return separate(stream, reco, conc_name=conc_name, tail_name=tail_name)
+        reco = gravity_recovery(stream, d50, ep, densities=prop_lookup)
+        return separate(stream, reco, conc_name=conc_name, tail_name=tail_name,
+                        assay_func=assay_func)
 
     elif unit.unit_type == "magnetic":
         thr, sharp = magnetic_cutpoint(unit)
-        reco = magnetic_recovery(stream, thr, sharp)
-        return separate(stream, reco, conc_name=conc_name, tail_name=tail_name)
+        reco = magnetic_recovery(stream, thr, sharp, mineral_props=prop_lookup)
+        return separate(stream, reco, conc_name=conc_name, tail_name=tail_name,
+                        assay_func=assay_func)
 
     elif unit.unit_type == "flotation":
-        reco = flotation_recovery(stream, unit)
+        reco = flotation_recovery(stream, unit, mineral_props=prop_lookup)
         au_reco = gold_flotation_recovery(stream, reco, unit)
         return separate(stream, reco, gold_recovery=au_reco,
-                        conc_name=conc_name, tail_name=tail_name)
+                        conc_name=conc_name, tail_name=tail_name, assay_func=assay_func)
 
     else:
         raise ValueError(f"Type d'unité inconnu : {unit.unit_type}")
 
 
-def run_series(feed, stages):
+def run_series(feed, stages, prop_lookup=None, assay_func=None):
     """
     Application d'une cascade d'unités en série, car le rejet de chaque étage alimente le
     suivant : ainsi on collecte un concentré par étage et un unique rejet final.
@@ -52,7 +54,8 @@ def run_series(feed, stages):
     for stage_name, unit in stages:
         conc, tail = apply_unit(current, unit,
                                 conc_name=f"conc_{stage_name}",
-                                tail_name=f"rejet_{stage_name}")
+                                tail_name=f"rejet_{stage_name}",
+                                prop_lookup=prop_lookup, assay_func=assay_func)
         concentrates[stage_name] = conc
         current = tail          # le rejet devient l'alimentation de l'étage suivant
     return {"feed": feed, "concentrates": concentrates, "final_tail": current}

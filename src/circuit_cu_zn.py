@@ -26,14 +26,14 @@ def build_stages(stage_configs):
     return stages
 
 
-def run_differential_circuit(feed, stage_configs):
+def run_differential_circuit(feed, stage_configs, prop_lookup=None, assay_func=None):
     """
     Application d'un circuit différentiel décrit par ses étages, car la séquence et la
     chimie de chaque étage définissent entièrement la séparation : ainsi on construit les
     unités puis on délègue le chaînage à run_series, déjà générique.
     """
     stages = build_stages(stage_configs)
-    return run_series(feed, stages)
+    return run_series(feed, stages, prop_lookup=prop_lookup, assay_func=assay_func)
 
 
 def print_circuit_result(feed, result, metals=("Cu", "Zn")):
