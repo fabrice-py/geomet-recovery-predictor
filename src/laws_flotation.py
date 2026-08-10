@@ -32,7 +32,7 @@ def rotor_bell_factor(rpm, rpm_opt=1200.0, width=350.0):
     """
     return math.exp(-((rpm - rpm_opt) ** 2) / (2 * width ** 2))
 
-def effective_floatability(mineral, unit_settings):
+def effective_floatability(mineral, unit_settings, mineral_props=None):
     """
     Flottabilité effective d'un minéral selon le collecteur et les modificateurs, car la
     sélectivité d'un circuit différentiel se pilote minéral par minéral : ainsi tout
@@ -52,6 +52,10 @@ def effective_floatability(mineral, unit_settings):
     if mineral in unit_settings.get("activated_minerals", []):
         return 0.90                          # activé : flotte comme un bon sulfure
 
+    # Flottabilite custom si fournie, sinon la base, car l'utilisateur peut definir des
+    # mineraux hors base : ainsi on lit sa valeur en priorite.
+    if mineral_props is not None and mineral in mineral_props:
+        return mineral_props[mineral]["floatability"]
     return MINERAL_PROPERTIES[mineral]["floatability"]
 
 
@@ -63,7 +67,7 @@ def ph_pyrite_factor(ph):
     return max(0.1, min(1.0, 1.0 - (ph - 8.0) / 4.0))
 
 
-def flotation_recovery(stream, unit):
+def flotation_recovery(stream, unit, mineral_props=None):
     """
     Récupération par minéral en flottation, car c'est le produit qu'attend separate() :
     ainsi on part de la flottabilité effective (selon le collecteur), on module k par la
@@ -83,7 +87,7 @@ def flotation_recovery(stream, unit):
 
     recovery = {}
     for m in stream.modal:
-        floatab = effective_floatability(m, s)
+        floatab = effective_floatability(m, s, mineral_props=mineral_props)
         rmax = min(0.98, 0.02 + 0.95 * (floatab ** 2) + rmax_bonus)
         k = (0.15 + 1.60 * floatab) * dose_factor * bell
 

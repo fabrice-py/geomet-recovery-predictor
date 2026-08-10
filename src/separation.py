@@ -91,7 +91,7 @@ class SeparationUnit:
 
 
 def separate(stream, recovery_by_mineral, gold_recovery=None,
-             conc_name="concentre", tail_name="rejet"):
+             conc_name="concentre", tail_name="rejet", assay_func=None):
     """
     Partage d'un flux en concentré + rejet à partir d'une récupération par minéral, car
     c'est l'opération commune à toutes les voies : ainsi chaque minéral voit sa masse
@@ -128,7 +128,9 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
             assays = {}
         else:
             modal = {m: round(mass_dict[m] / total * 100.0, 4) for m in minerals}
-            assays = assays_from_modal(modal)
+            # Reconstruction des teneurs : fonction custom si fournie (mineraux hors base),
+            # sinon la stoechiometrie de la base, car un minerai custom a sa propre chimie.
+            assays = assay_func(modal) if assay_func is not None else assays_from_modal(modal)
             # Teneur en or du produit = or contenu / masse du produit, car l'or se
             # reconcentre dans le flux qui capte les sulfures : ainsi un petit concentré
             # riche en sulfures aura une teneur en or bien plus élevée que l'alimentation.

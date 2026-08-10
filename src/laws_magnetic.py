@@ -33,7 +33,7 @@ def magnetic_capture(susceptibility, threshold, sharpness):
     return 1.0 / (1.0 + math.exp(-sharpness * (susceptibility - threshold)))
 
 
-def magnetic_recovery(stream, threshold, sharpness):
+def magnetic_recovery(stream, threshold, sharpness, mineral_props=None):
     """
     Récupération par minéral au concentré magnétique, car c'est le produit qu'attend
     separate() : ainsi on lit la catégorie magnétique de chaque minéral, on la traduit
@@ -43,7 +43,12 @@ def magnetic_recovery(stream, threshold, sharpness):
     """
     recovery = {}
     for m in stream.modal:
-        cat = MINERAL_PROPERTIES[m]["magnetic"]
+        # Categorie magnetique custom si fournie, sinon la base, car l'utilisateur peut
+        # definir des mineraux hors base : ainsi on lit sa valeur en priorite.
+        if mineral_props is not None and m in mineral_props:
+            cat = mineral_props[m]["magnetic"]
+        else:
+            cat = MINERAL_PROPERTIES[m]["magnetic"]
         chi = SUSCEPTIBILITY[cat]
         recovery[m] = round(magnetic_capture(chi, threshold, sharpness), 4)
     return recovery

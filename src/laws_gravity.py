@@ -38,7 +38,7 @@ def effective_density(mineral_density, liberation_degree, mean_density):
     return liberation_degree * mineral_density + (1 - liberation_degree) * mean_density
 
 
-def gravity_recovery(stream, d50, ep):
+def gravity_recovery(stream, d50, ep, densities=None):
     """
     Récupération par minéral pour un concentrateur gravimétrique, car c'est le produit
     final qu'attend separate() : ainsi on calcule, pour chaque minéral, sa densité
@@ -47,8 +47,18 @@ def gravity_recovery(stream, d50, ep):
     d50, ep : paramètres de coupure fournis par la machine (calculés à partir de ses
     réglages), car c'est la machine qui fixe où et comment on coupe.
     """
-    densities = get_densities()
-
+    # Densites custom si fournies (mineraux hors base), sinon la base interne, car la
+    # fonction doit accepter des mineraux que l'utilisateur definit lui-meme : ainsi on
+    # complete par la base pour tout mineral non fourni.
+    base_densities = get_densities()
+    if densities is None:
+        densities = base_densities
+    else:
+        # On fusionne : les proprietes custom priment, la base comble le reste.
+        merged = dict(base_densities)
+        for m, props in densities.items():
+            merged[m] = props["density"] if isinstance(props, dict) else props
+        densities = merged
     # Densité moyenne du solide, car elle sert de point d'attraction pour les particules
     # mal libérées : ainsi on la calcule sur la minéralogie réelle du flux.
     w = {m: stream.modal[m] / 100.0 for m in stream.modal}
