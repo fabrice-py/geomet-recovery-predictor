@@ -13,7 +13,7 @@ re-calcule avec un reglage different.
 from separation import SeparationUnit, separate
 from laws_gravity import gravity_recovery, gravity_cutpoint
 from laws_magnetic import magnetic_recovery, magnetic_cutpoint
-from laws_flotation import flotation_recovery, gold_flotation_recovery
+from laws_flotation import (flotation_recovery, gold_flotation_recovery, effective_floatability, kinetic_recovery,rotor_bell_factor, ph_pyrite_factor)
 from circuit_cu_zn import run_differential_circuit
 
 
@@ -126,6 +126,55 @@ def grade_recovery_circuit(feed, stage_configs, stage_index, sweep_param, sweep_
     points.sort(key=lambda p: p["recup_metal_%"])
     return points
 
+
+import math
+
+
+def kinetics_curve(feed, unit, minerals=None, t_max=15.0, n_points=40,
+                   mineral_props=None):
+    """
+    Courbe cinetique R(t) par mineral, car la flottation est un processus temporel : ainsi
+    on evalue, a reglages FIXES, la recuperation cumulee de chaque mineral en fonction du
+    temps de residence, ce qui est la courbe d'un essai de flottation en laboratoire.
+
+    On REUTILISE exactement la logique de flotation_recovery (memes rmax et k), en ne
+    faisant varier que le temps t : ainsi la courbe est rigoureusement coherente avec la
+    separation calculee par le modele. En flottation inverse, le concentre recupere ce qui
+    NE monte PAS (recovery = 1 - fraction montee), comme dans flotation_recovery.
+
+    Retour : dict {mineral: (temps[], recuperations[])} pour les mineraux demandes.
+    """
+    s = unit.settings
+    collector = s["collector_type"]
+    reverse = (collector == "amine_inverse")
+    dose_factor = 1.0 - math.exp(-s["collector_gpt"] / 80.0)
+    bell = rotor_bell_factor(s["rotor_speed_rpm"])
+    rmax_bonus = 0.10 * (1.0 - math.exp(-s["frother_gpt"] / 25.0))
+    ph = s["pulp_ph"]
+
+    # Par defaut, on trace les mineraux presents en proportion non negligeable, car tracer
+    # une phase absente n'a pas de sens : ainsi on filtre sur le modal.
+    if minerals is None:
+        minerals = [m for m, pct in feed.modal.items() if pct > 0.01]
+
+    times = [t_max * i / (n_points - 1) for i in range(n_points)]
+
+    curves = {}
+    for m in minerals:
+        floatab = effective_floatability(m, s, mineral_props=mineral_props)
+        rmax = min(0.98, 0.02 + 0.95 * (floatab ** 2) + rmax_bonus)
+        k = (0.15 + 1.60 * floatab) * dose_factor * bell
+        if m == "pyrite_co" and not reverse:
+            rmax *= ph_pyrite_factor(ph)
+
+        recs = []
+        for t in times:
+            float_frac = kinetic_recovery(rmax, k, t)
+            rec = (1.0 - float_frac) if reverse else float_frac
+            recs.append(round(100.0 * rec, 2))   # en %
+        curves[m] = (times, recs)
+
+    return curves
 
 if __name__ == "__main__":
     import numpy as np

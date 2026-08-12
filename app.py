@@ -27,8 +27,7 @@ from laws_gravity import gravity_recovery, gravity_cutpoint
 from laws_magnetic import magnetic_recovery, magnetic_cutpoint
 from laws_flotation import flotation_recovery, gold_flotation_recovery
 from circuit_cu_zn import run_differential_circuit
-from geomet_curves import (performance_row, grade_recovery_simple,
-                           grade_recovery_circuit)
+from geomet_curves import (performance_row, grade_recovery_simple, grade_recovery_circuit, kinetics_curve)
 
 
 XRF_ELEMENTS = [
@@ -394,7 +393,31 @@ if st.session_state.get("has_result"):
                     element, prop_lookup=prop_lookup, assay_func=assay_func)
                 plot_grade_recovery(pts, element, csweep,
                                     f"Teneur-recuperation ({element}) - balayage {csweep}")
+# ---- Section cinetique (flottation uniquement) ----
+        if unit_type == "flotation":
+            st.markdown("---")
+            st.subheader("Cinetique de flottation")
+            st.caption("Recuperation de chaque mineral en fonction du temps de residence, "
+                       "a reglages fixes. On voit la selectivite s'installer dans le temps : "
+                       "les mineraux flottables montent vite vers leur plateau.")
+            if st.button("Tracer la cinetique", key="trace_kinetics"):
+                unit_k = SeparationUnit(unit_type, settings)
+                curves = kinetics_curve(feed, unit_k, mineral_props=prop_lookup)
 
+                fig, ax = plt.subplots(figsize=(7, 5))
+                for mineral, (times, recs) in curves.items():
+                    ax.plot(times, recs, "-", lw=2, label=mineral)
+                ax.set_xlabel("Temps de residence (min)")
+                ax.set_ylabel("Recuperation (%)")
+                ax.set_title("Cinetique de flottation par mineral")
+                ax.grid(True, alpha=0.3)
+                ax.legend(fontsize=8)
+                ax.set_ylim(0, 100)
+                fig.tight_layout()
+                st.pyplot(fig)
+                st.caption("Le temps de residence actuel du reglage est "
+                           f"{settings.get('residence_min', 0):.1f} min. Au-dela du plateau "
+                           "d'un mineral, prolonger ne fait qu'entrainer de la gangue.")
     else:  # Circuit
         stage_configs = st.session_state["stage_configs"]
         if len(stage_configs) == 0:
