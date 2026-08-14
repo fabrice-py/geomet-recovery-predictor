@@ -11,11 +11,11 @@ re-calcule avec un reglage different.
 """
 
 from separation import SeparationUnit, separate
-from laws_gravity import gravity_recovery, gravity_cutpoint
+from laws_gravity import gravity_recovery, gravity_cutpoint, gold_gravity_recovery
 from laws_magnetic import magnetic_recovery, magnetic_cutpoint
 from laws_flotation import (flotation_recovery, gold_flotation_recovery, effective_floatability, kinetic_recovery,rotor_bell_factor, ph_pyrite_factor)
 from circuit_cu_zn import run_differential_circuit
-
+import math
 
 # ---------------------------------------------------------------- indicateurs
 
@@ -25,28 +25,36 @@ def mass_recovery(feed, concentrate):
     if feed.solids_tph <= 1e-9:
         return 0.0
     return 100.0 * concentrate.solids_tph / feed.solids_tph
-
+def _assay_value(stream, element):
+    """Teneur du metal dans un flux, car l'or est stocke en g/t sous 'Au_gt' et non en %
+    sous 'Au' comme les autres elements : ainsi on aiguille vers la bonne cle, ce qui
+    permet de suivre l'or (teneur en g/t) comme n'importe quel autre metal."""
+    if element == "Au":
+        return stream.assays.get("Au_gt", 0.0)
+    return stream.assays.get(element, 0.0)
 
 def metal_recovery(feed, concentrate, element):
     """Recuperation metallurgique (%) d'un metal, car c'est la part du metal partie au
-    concentre : ainsi (teneur_conc x masse_conc) / (teneur_alim x masse_alim) x 100."""
-    feed_metal = feed.assays.get(element, 0.0) * feed.solids_tph
+    concentre : ainsi (teneur_conc x masse_conc) / (teneur_alim x masse_alim) x 100.
+    L'or est lu en g/t (cle 'Au_gt') via _assay_value, mais la recuperation reste un %."""
+    feed_metal = _assay_value(feed, element) * feed.solids_tph
     if feed_metal <= 1e-9:
         return 0.0
-    conc_metal = concentrate.assays.get(element, 0.0) * concentrate.solids_tph
+    conc_metal = _assay_value(concentrate, element) * concentrate.solids_tph
     return 100.0 * conc_metal / feed_metal
 
 
 def performance_row(feed, stream, element):
-    """Ligne de performance d'un produit, car on veut masse, recup massique, teneur et
-    recup metallurgique d'un coup : ainsi on renvoie le tuple pret a afficher."""
+    """Ligne de performance d'un produit : masse, recup massique, teneur et recup
+    metallurgique d'un coup. L'unite de teneur s'adapte (or en g/t, autres en %), car
+    afficher l'or en % n'aurait pas de sens (teneurs minuscules)."""
+    unit = "g/t" if element == "Au" else "%"
     return {
         "masse_tph": round(stream.solids_tph, 2),
         "recup_massique_%": round(mass_recovery(feed, stream), 2),
-        f"teneur_{element}_%": round(stream.assays.get(element, 0.0), 3),
+        f"teneur_{element}_{unit}": round(_assay_value(stream, element), 3),
         f"recup_metal_{element}_%": round(metal_recovery(feed, stream, element), 2),
     }
-
 
 # ---------------------------------------------------------------- separation simple
 
@@ -57,7 +65,8 @@ def _apply_one(feed, unit_type, settings, prop_lookup=None, assay_func=None):
     if unit_type in ("shaking_table", "spiral", "falcon"):
         d50, ep = gravity_cutpoint(unit)
         reco = gravity_recovery(feed, d50, ep, densities=prop_lookup)
-        return separate(feed, reco, assay_func=assay_func)
+        au = gold_gravity_recovery(feed, reco, unit, d50=d50, ep=ep)
+        return separate(feed, reco, gold_recovery=au, assay_func=assay_func)
     elif unit_type == "magnetic":
         thr, sharp = magnetic_cutpoint(unit)
         reco = magnetic_recovery(feed, thr, sharp, mineral_props=prop_lookup)
@@ -84,7 +93,7 @@ def grade_recovery_simple(feed, unit_type, base_settings, sweep_param, sweep_val
         points.append({
             "param": round(float(val), 3),
             "recup_metal_%": round(metal_recovery(feed, conc, element), 2),
-            "teneur_%": round(conc.assays.get(element, 0.0), 3),
+            "teneur_%": round(_assay_value(conc, element), 3),
             "recup_massique_%": round(mass_recovery(feed, conc), 2),
         })
     # Tri par recuperation croissante, car une courbe teneur-recuperation se lit ainsi :
@@ -118,16 +127,13 @@ def grade_recovery_circuit(feed, stage_configs, stage_index, sweep_param, sweep_
         points.append({
             "param": round(float(val), 3),
             "recup_metal_%": round(metal_recovery(feed, conc, element), 2),
-            "teneur_%": round(conc.assays.get(element, 0.0), 3),
+            "teneur_%": round(_assay_value(conc, element), 3),
             "recup_massique_%": round(mass_recovery(feed, conc), 2),
         })
     # Tri par recuperation croissante, car une courbe teneur-recuperation se lit ainsi :
     # ainsi on evite les zigzags dus a un balayage non monotone.
     points.sort(key=lambda p: p["recup_metal_%"])
     return points
-
-
-import math
 
 
 def kinetics_curve(feed, unit, minerals=None, t_max=15.0, n_points=40,

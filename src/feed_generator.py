@@ -96,9 +96,30 @@ def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
             refractory = float(np.clip(
                 0.25 + 0.50 * host_norm + 0.20 * (1 - fineness[i])
                 + rng.normal(0, 0.05), 0, 0.95))
-            stream.assays["Au_gt"] = round(float(au_gt[i]), 2)
+            total_au = float(au_gt[i])
+            # Or dans les sulfures (part refractaire), car pige dans pyrite/arseno : ainsi
+            # il suivra la flottation de ses hotes.
+            au_sulfide = total_au * refractory
+            # La part non-sulfures se scinde en natif (gravimetrie) et gangue (recuperable
+            # seulement si le broyage libere), selon les fractions du profil.
+            nf = profile.get("au_native_frac", 1.0)
+            gf = profile.get("au_gangue_frac", 0.0)
+            denom = nf + gf if (nf + gf) > 1e-9 else 1.0
+            non_sulfide = total_au * (1 - refractory)
+            au_native = non_sulfide * nf / denom
+            au_gangue = non_sulfide * gf / denom
+            # L'or de la gangue n'est effectivement recuperable qu'a hauteur de la finesse
+            # de broyage, car il faut liberer le grain : ainsi broyage grossier -> ~0.
+            au_gangue_recoverable = au_gangue * fineness[i]
+
+            stream.assays["Au_gt"] = round(total_au, 2)
             stream.assays["Au_refractory_frac"] = round(refractory, 3)
-            stream.assays["Au_free_gt"] = round(float(au_gt[i]) * (1 - refractory), 2)
+            stream.assays["Au_sulfide_gt"] = round(au_sulfide, 3)
+            stream.assays["Au_native_gt"] = round(au_native, 3)
+            stream.assays["Au_gangue_gt"] = round(au_gangue, 3)
+            stream.assays["Au_gangue_recoverable_gt"] = round(au_gangue_recoverable, 3)
+            # Conserve l'ancienne cle pour compatibilite (or "libre" = natif + gangue libere).
+            stream.assays["Au_free_gt"] = round(au_native + au_gangue_recoverable, 2)
 
         streams.append(stream)
 

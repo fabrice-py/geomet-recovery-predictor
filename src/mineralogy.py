@@ -48,12 +48,26 @@ ORE_PROFILES = {
         "gold_bearing": True,
         "au_gt_range":  (0.5, 8.0),                   # or a l'alimentation (g/t)
         "au_hosts":     ["arsenopyrite", "pyrite_co"],# sulfures piegeant l'or
+        "au_native_frac": 0.2,
+        "au_gangue_frac": 0.1,
     },
     "polymetallic_pb_cu_zn": {
         "minerals":     ["galena", "chalcopyrite", "sphalerite", "pyrite_co",
                          "gangue_silicate"],
         "modal_alpha":  [0.5, 0.6, 0.9, 1.0, 12.0],
         "gold_bearing": False,
+    },
+    "polymetallic_au_cu_zn_pb": {
+        "minerals": ["galena", "chalcopyrite", "sphalerite", "pyrite_co",
+                     "arsenopyrite", "gangue_silicate"],
+        "modal_alpha": [0.5, 0.6, 0.7, 1.0, 0.4, 12.0],
+        "gold_bearing": True,
+        "au_gt_range": (0.5, 6.0),
+        "au_hosts": ["arsenopyrite", "pyrite_co"],
+        # Repartition de la part NON-sulfures de l'or (native vs gangue). A CALIBRER sur
+        # donnees de litterature ; valeurs de depart plausibles pour un gisement type Abitibi.
+        "au_native_frac": 0.5,
+        "au_gangue_frac": 0.5,
     },
 }
 

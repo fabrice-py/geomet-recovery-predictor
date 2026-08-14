@@ -70,6 +70,64 @@ def gravity_recovery(stream, d50, ep, densities=None):
         rho_eff = effective_density(densities[m], lib, mean_density)
         recovery[m] = round(partition_probability(rho_eff, d50, ep), 4)
     return recovery
+
+def gold_gravity_recovery(stream, mineral_recovery, unit, d50=None, ep=None):
+    """
+    Recuperation de l'or au concentre gravimetrique, physiquement, car chaque mode d'or a
+    une densite effective differente selon son hote : ainsi on traite chaque mode comme une
+    particule et on lui applique la MEME courbe de partage que les mineraux (d50, ep issus
+    des reglages machine). L'or devient donc sensible aux reglages ET a la liberation.
+
+    - or natif : densite proche de l'or pur (~19), tres bien recupere ;
+    - or gangue : densite effective = moyenne or/silicate ponderee par la liberation (mal
+      libere -> tire vers la gangue legere -> moins recupere) ; en plus, seule la part
+      liberee par le broyage est recuperable (Au_gangue_recoverable_gt) ;
+    - or sulfures : densite effective = moyenne or/sulfure ; suit ses sulfures, qui en
+      gravimetrie partent peu au concentre.
+
+    Renvoie une fraction 0-1 de l'or TOTAL partant au concentre (ce qu'attend separate()).
+    """
+    total_au = stream.assays.get("Au_gt", None)
+    if total_au is None or total_au <= 1e-9:
+        return 0.0
+
+    # Coupure imposee si fournie (mode direct), sinon calculee depuis la machine, car l'or
+    # doit suivre la MEME coupure que les mineraux : ainsi il reste coherent avec la separation.
+    if d50 is None:
+        d50, ep = gravity_cutpoint(unit)
+    rho_gold = 19.3
+    rho_gangue = 2.65
+    rho_sulfide = 5.5   # moyenne pyrite/arsenopyrite, hotes typiques de l'or
+
+    # Libération moyenne (sert a moduler la densite effective de l'or gangue/sulfures).
+    lib_gangue = stream.liberation.degree.get("gangue_silicate", 0.85)
+
+    # Or natif : particule quasi pure d'or, tres dense.
+    p_native = partition_probability(rho_gold, d50, ep)
+
+    # Or gangue : densite effective tiree vers la gangue selon la liberation, car un grain
+    # d'or mal degage de la silice se comporte comme un composite plus leger.
+    rho_gangue_eff = lib_gangue * rho_gold + (1 - lib_gangue) * rho_gangue
+    p_gangue = partition_probability(rho_gangue_eff, d50, ep)
+
+    # Or sulfures : densite effective or/sulfure, mais on la pondere par la recuperation
+    # gravimetrique reelle des sulfures hotes, car l'or suit ses hotes : si les sulfures ne
+    # partent pas au concentre, leur or non plus.
+    hosts = ["pyrite_co", "arsenopyrite"]
+    host_mass = {h: stream.modal.get(h, 0.0) for h in hosts}
+    total_host = sum(host_mass.values())
+    host_grav = (sum(mineral_recovery.get(h, 0.0) * host_mass[h] for h in hosts)
+                 / total_host) if total_host > 1e-9 else 0.0
+
+    au_native = stream.assays.get("Au_native_gt", 0.0)
+    au_gangue_recov = stream.assays.get("Au_gangue_recoverable_gt", 0.0)
+    au_sulfide = stream.assays.get("Au_sulfide_gt", 0.0)
+
+    recovered = (au_native * p_native
+                 + au_gangue_recov * p_gangue
+                 + au_sulfide * host_grav)
+    return round(recovered / total_au, 4)
+
 def gravity_cutpoint(unit):
     """
     Traduction des réglages d'un concentrateur en paramètres de coupure (d50, Ep), car

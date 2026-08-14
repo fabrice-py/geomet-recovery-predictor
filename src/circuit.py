@@ -9,7 +9,7 @@ faire circuler les flux.
 """
 
 from separation import separate
-from laws_gravity import gravity_recovery, gravity_cutpoint
+from laws_gravity import gravity_recovery, gravity_cutpoint, gold_gravity_recovery
 from laws_magnetic import magnetic_recovery, magnetic_cutpoint
 from laws_flotation import flotation_recovery, gold_flotation_recovery
 
@@ -22,8 +22,8 @@ def apply_unit(stream, unit, conc_name="concentre", tail_name="rejet",  prop_loo
     if unit.unit_type in ("shaking_table", "spiral", "falcon"):
         d50, ep = gravity_cutpoint(unit)
         reco = gravity_recovery(stream, d50, ep, densities=prop_lookup)
-        return separate(stream, reco, conc_name=conc_name, tail_name=tail_name,
-                        assay_func=assay_func)
+        au = gold_gravity_recovery(stream, reco, unit, d50=d50, ep=ep)
+        return separate(stream, reco, gold_recovery=au, conc_name=conc_name, tail_name=tail_name, assay_func=assay_func)
 
     elif unit.unit_type == "magnetic":
         thr, sharp = magnetic_cutpoint(unit)
