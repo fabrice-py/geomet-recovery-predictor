@@ -89,7 +89,7 @@ def gold_gravity_recovery(stream, mineral_recovery, unit, d50=None, ep=None):
     """
     total_au = stream.assays.get("Au_gt", None)
     if total_au is None or total_au <= 1e-9:
-        return 0.0
+        return {"sulfide": 0.0, "native": 0.0, "gangue": 0.0}
 
     # Coupure imposee si fournie (mode direct), sinon calculee depuis la machine, car l'or
     # doit suivre la MEME coupure que les mineraux : ainsi il reste coherent avec la separation.
@@ -129,13 +129,20 @@ def gold_gravity_recovery(stream, mineral_recovery, unit, d50=None, ep=None):
     host_grav = (sum(mineral_recovery.get(h, 0.0) * host_mass[h] for h in hosts)
                  / total_host) if total_host > 1e-9 else 0.0
 
-    au_gangue_recov = stream.assays.get("Au_gangue_recoverable_gt", 0.0)
-    au_sulfide = stream.assays.get("Au_sulfide_gt", 0.0)
+    # Taux du mode natif = fraction de l'or natif reellement recuperee (moyenne ponderee
+    # des 3 classes de liberation), car separate() applique un taux a Au_native_gt : ainsi
+    # on ramene native_recovered a une fraction du natif total.
+    au_native_total = au_nat_lib + au_nat_med + au_nat_lock
+    native_rate = (native_recovered / au_native_total) if au_native_total > 1e-9 else 0.0
 
-    recovered = (native_recovered
-                 + au_gangue_recov * p_gangue
-                 + au_sulfide * host_grav)
-    return round(recovered / total_au, 4)
+    # On renvoie un taux PAR MODE (dict), car separate() repartit chaque mode d'or
+    # separement : ainsi en gravite l'or natif (dense) se recupere bien, l'or sulfures peu
+    # (il suit ses sulfures peu denses), et chaque mode voyage correctement en circuit.
+    return {
+        "sulfide": round(host_grav, 4),
+        "native": round(native_rate, 4),
+        "gangue": round(p_gangue, 4),
+    }
 
 def gravity_cutpoint(unit):
     """
