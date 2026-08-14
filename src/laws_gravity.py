@@ -102,8 +102,18 @@ def gold_gravity_recovery(stream, mineral_recovery, unit, d50=None, ep=None):
     # Libération moyenne (sert a moduler la densite effective de l'or gangue/sulfures).
     lib_gangue = stream.liberation.degree.get("gangue_silicate", 0.85)
 
-    # Or natif : particule quasi pure d'or, tres dense.
-    p_native = partition_probability(rho_gold, d50, ep)
+    # Or natif reparti en classes de liberation, car un grain mal degage a une densite
+    # effective plus basse et se recupere moins bien : ainsi on applique la courbe de
+    # partage a chaque classe (bien libere ~19, moyen ~11, enchasse ~7), ce qui etale la
+    # courbe teneur-recuperation au lieu d'un "tout ou rien".
+    au_nat_lib = stream.assays.get("Au_native_liberated_gt", 0.0)
+    au_nat_med = stream.assays.get("Au_native_medium_gt", 0.0)
+    au_nat_lock = stream.assays.get("Au_native_locked_gt", 0.0)
+    p_nat_lib = partition_probability(19.0, d50, ep)
+    p_nat_med = partition_probability(11.0, d50, ep)
+    p_nat_lock = partition_probability(7.0, d50, ep)
+    native_recovered = (au_nat_lib * p_nat_lib + au_nat_med * p_nat_med
+                        + au_nat_lock * p_nat_lock)
 
     # Or gangue : densite effective tiree vers la gangue selon la liberation, car un grain
     # d'or mal degage de la silice se comporte comme un composite plus leger.
@@ -119,11 +129,10 @@ def gold_gravity_recovery(stream, mineral_recovery, unit, d50=None, ep=None):
     host_grav = (sum(mineral_recovery.get(h, 0.0) * host_mass[h] for h in hosts)
                  / total_host) if total_host > 1e-9 else 0.0
 
-    au_native = stream.assays.get("Au_native_gt", 0.0)
     au_gangue_recov = stream.assays.get("Au_gangue_recoverable_gt", 0.0)
     au_sulfide = stream.assays.get("Au_sulfide_gt", 0.0)
 
-    recovered = (au_native * p_native
+    recovered = (native_recovered
                  + au_gangue_recov * p_gangue
                  + au_sulfide * host_grav)
     return round(recovered / total_au, 4)

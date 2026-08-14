@@ -86,10 +86,14 @@ def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
             pct_solids_mass=round(float(pct_solids[i]), 1),
             assays=assays,
         )
-
+# On memorise le profil dans le flux, car recalculer la liberation/l'or selon un
+        # nouveau P80 (via apply_p80) exige de connaitre les hotes de l'or et les fractions :
+        # ainsi le flux devient autonome.
+        stream.profile_name = profile_name
         # Ajout de l'or réfractaire à part, car il ne provient pas de la stœchiométrie
         # des minéraux : ainsi sa part piégée croît avec les sulfures hôtes et avec un
         # broyage grossier, et le reste constitue l'or libre récupérable.
+        
         if gold:
             host_modal = sum(modal_matrix[i, j] for j in host_idx)
             host_norm = np.clip(host_modal / 5.0, 0, 1)
@@ -118,6 +122,16 @@ def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
             stream.assays["Au_native_gt"] = round(au_native, 3)
             stream.assays["Au_gangue_gt"] = round(au_gangue, 3)
             stream.assays["Au_gangue_recoverable_gt"] = round(au_gangue_recoverable, 3)
+            # Distribution de LIBERATION de l'or natif, car un grain d'or mal degage se
+            # recupere mal en gravite : ainsi on scinde le natif en trois classes selon la
+            # finesse, ce qui etale la courbe teneur-recuperation (au lieu d'un "tout ou rien").
+            L = fineness[i]
+            f_lib = L
+            f_lock = (1 - L) ** 2
+            f_med = max(0.0, 1 - f_lib - f_lock)
+            stream.assays["Au_native_liberated_gt"] = round(au_native * f_lib, 3)
+            stream.assays["Au_native_medium_gt"] = round(au_native * f_med, 3)
+            stream.assays["Au_native_locked_gt"] = round(au_native * f_lock, 3)
             # Conserve l'ancienne cle pour compatibilite (or "libre" = natif + gangue libere).
             stream.assays["Au_free_gt"] = round(au_native + au_gangue_recoverable, 2)
 
@@ -140,6 +154,66 @@ def streams_to_dataframe(streams):
         rows.append(row)
     return pd.DataFrame(rows)
 
+def apply_p80(stream, p80):
+    """
+    Recalcule la liberation et la distribution de l'or d'un flux pour un P80 donne, car le
+    P80 regle par l'utilisateur doit reellement piloter la liberation (et donc les
+    recuperations) : ainsi on refait, de façon deterministe, ce que generate_feed calcule,
+    mais avec le P80 effectif. Modifie le flux en place.
+    """
+    p80 = float(np.clip(p80, 10, 300))
+    fineness = 1 - (p80 - 45) / (300 - 45)
+    fineness = float(np.clip(fineness, 0.0, 1.0))
+    stream.p80_um = round(p80, 1)
+
+    # Liberation par mineral, deterministe (sans bruit), car un reglage utilisateur doit
+    # etre reproductible : ainsi la liberation est une fonction lisse du P80.
+    degree = {m: float(np.clip(0.55 + 0.35 * fineness, 0, 1)) for m in stream.modal}
+    stream.liberation = LiberationState(degree={m: round(v, 3) for m, v in degree.items()})
+
+    # Cascade de l'or, si present, recalculee avec le P80 effectif.
+    profile_name = getattr(stream, "profile_name", None)
+    if profile_name is None or profile_name not in ORE_PROFILES:
+        return stream
+    profile = ORE_PROFILES[profile_name]
+    if not profile.get("gold_bearing", False):
+        return stream
+
+    total_au = stream.assays.get("Au_gt", 0.0)
+    if total_au <= 1e-9:
+        return stream
+
+    # Part refractaire recalculee, car broyer plus fin libere une partie de l'or des
+    # sulfures : ainsi refractory baisse quand la finesse monte.
+    hosts = profile["au_hosts"]
+    host_modal = sum(stream.modal.get(h, 0.0) for h in hosts)
+    host_norm = float(np.clip(host_modal / 5.0, 0, 1))
+    refractory = float(np.clip(0.25 + 0.50 * host_norm + 0.20 * (1 - fineness), 0, 0.95))
+
+    au_sulfide = total_au * refractory
+    nf = profile.get("au_native_frac", 1.0)
+    gf = profile.get("au_gangue_frac", 0.0)
+    denom = nf + gf if (nf + gf) > 1e-9 else 1.0
+    non_sulfide = total_au * (1 - refractory)
+    au_native = non_sulfide * nf / denom
+    au_gangue = non_sulfide * gf / denom
+    au_gangue_recoverable = au_gangue * fineness
+
+    L = fineness
+    f_lib = L
+    f_lock = (1 - L) ** 2
+    f_med = max(0.0, 1 - f_lib - f_lock)
+
+    stream.assays["Au_refractory_frac"] = round(refractory, 3)
+    stream.assays["Au_sulfide_gt"] = round(au_sulfide, 3)
+    stream.assays["Au_native_gt"] = round(au_native, 3)
+    stream.assays["Au_gangue_gt"] = round(au_gangue, 3)
+    stream.assays["Au_gangue_recoverable_gt"] = round(au_gangue_recoverable, 3)
+    stream.assays["Au_native_liberated_gt"] = round(au_native * f_lib, 3)
+    stream.assays["Au_native_medium_gt"] = round(au_native * f_med, 3)
+    stream.assays["Au_native_locked_gt"] = round(au_native * f_lock, 3)
+    stream.assays["Au_free_gt"] = round(au_native + au_gangue_recoverable, 2)
+    return stream
 
 if __name__ == "__main__":
     # Génération des deux profils, car on veut vérifier que l'architecture tient sur

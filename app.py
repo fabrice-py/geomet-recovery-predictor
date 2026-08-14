@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from i18n import t, LANGUAGES, param_label, option_label, route_label
-from feed_generator import generate_feed
+from feed_generator import generate_feed, apply_p80
 from mineralogy import ORE_PROFILES, MINERALS, assays_from_modal
 from data_models import Stream, LiberationState
 from separation import SeparationUnit, SEPARATION_SPECS, separate
@@ -305,8 +305,9 @@ def build_feed():
     assay_func = None
     if profile_name is not None:
         feed = generate_feed(profile_name, n_samples=1, seed=42, feed_tph=feed_tph)[0]
-        feed.p80_um = p80
-        feed.liberation = LiberationState(degree={m: liberation_deg for m in feed.modal})
+        # Recalcule liberation ET distribution de l'or selon le P80 choisi, car le curseur
+        # doit reellement piloter la recuperation : ainsi le P80 de la sidebar devient actif.
+        apply_p80(feed, p80)
         return feed, prop_lookup, assay_func
     if custom_modal is not None:
         total = sum(custom_modal.values())

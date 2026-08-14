@@ -23,8 +23,8 @@ SEPARATION_SPECS = {
         "deck_slope_deg": {"min": 1.5, "max": 6.0, "default": 3.0},
         "stroke_freq_hz": {"min": 4.0, "max": 7.0, "default": 5.5},
         "wash_water_lpm": {"min": 5.0, "max": 40.0, "default": 20.0},
-        "_d50_range": (2.9, 8.0),   # plage de densité de coupure accessible
-        "_ep_base": 0.35,           # netteté nominale (bonne)
+        "_d50_range": (2.9, 6.5),   # plage de densité de coupure accessible
+        "_ep_base": 0.8,           # netteté nominale (bonne)
     },
     "spiral": {
         "feed_rate_tph": {"min": 1.0, "max": 6.0, "default": 3.0},
