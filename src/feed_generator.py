@@ -215,6 +215,14 @@ def apply_p80(stream, p80):
     stream.assays["Au_free_gt"] = round(au_native + au_gangue_recoverable, 2)
     return stream
 
+def liberation_from_p80(p80):
+    """Degre de liberation moyen deduit du P80, car la finesse de broyage pilote la
+    liberation : ainsi base et custom utilisent la meme loi que les profils (coherence)."""
+    p80 = float(np.clip(p80, 10, 300))
+    fineness = 1 - (p80 - 45) / (300 - 45)
+    fineness = float(np.clip(fineness, 0.0, 1.0))
+    return round(float(np.clip(0.55 + 0.35 * fineness, 0, 1)), 3)
+
 if __name__ == "__main__":
     # Génération des deux profils, car on veut vérifier que l'architecture tient sur
     # le cas simple (fer) comme sur le cas complexe (polymétallique).

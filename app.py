@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 
 from i18n import t, LANGUAGES, param_label, option_label, route_label
-from feed_generator import generate_feed, apply_p80
+from feed_generator import generate_feed, apply_p80, liberation_from_p80
 from mineralogy import ORE_PROFILES, MINERALS, assays_from_modal
 from data_models import Stream, LiberationState
 from separation import SeparationUnit, SEPARATION_SPECS, separate
@@ -66,7 +66,7 @@ SWEEP_PARAMS = {
     "shaking_table": ["deck_slope_deg", "wash_water_lpm", "feed_rate_tph"],
     "spiral": ["wash_water_lpm", "feed_rate_tph"],
     "falcon": ["g_force", "fluidization_lpm"],
-    "magnetic": ["field_tesla"],
+    "magnetic": ["field_tesla", "drum_speed_rpm"],
     "flotation": ["collector_gpt", "pulp_ph", "residence_min"],
 }
 GRAVITY_ROUTES = ("shaking_table", "spiral", "falcon")
@@ -134,7 +134,7 @@ def perf_table(feed, streams_named, element):
     st.dataframe(rows, use_container_width=True)
 
 
-def plot_grade_recovery(points, element, sweep_param, title):
+def plot_grade_recovery(points, element, sweep_param, title, sweep_label=None):
     reco = [p["recup_metal_%"] for p in points]
     grade = [p["teneur_%"] for p in points]
     vals = [p["param"] for p in points]
@@ -163,7 +163,8 @@ def plot_grade_recovery(points, element, sweep_param, title):
     st.pyplot(fig)
 
     st.subheader(t("curve_points", lang))
-    st.dataframe([{sweep_param: p["param"], t("col_recov", lang): p["recup_metal_%"],
+    col_param = sweep_label if sweep_label else sweep_param
+    st.dataframe([{col_param: p["param"], t("col_recov", lang): p["recup_metal_%"],
                    t("col_grade", lang): p["teneur_%"], t("col_mass", lang): p["recup_massique_%"]}
                   for p in points], use_container_width=True)
 
@@ -202,7 +203,6 @@ else:
     st.sidebar.caption(t("custom_minerals_caption", lang))
 
 p80 = st.sidebar.slider(t("p80", lang), 10.0, 300.0, 150.0, step=5.0)
-liberation_deg = st.sidebar.slider(t("liberation", lang), 0.0, 1.0, 0.85, step=0.05)
 
 # ============================ SIDEBAR : METAL D'INTERET ============================
 st.sidebar.header(t("metal_header", lang))
@@ -316,7 +316,7 @@ def build_feed():
             st.stop()
         modal = {m: round(v / total * 100, 3) for m, v in custom_modal.items()}
         assays = assays_from_modal(modal)
-        lib = LiberationState(degree={m: liberation_deg for m in modal})
+        lib = LiberationState(degree={m: liberation_from_p80(p80) for m in modal})
         feed = Stream(name="minerai_base", solids_tph=feed_tph, modal=modal,
                       liberation=lib, p80_um=p80, assays=assays)
         return feed, prop_lookup, assay_func
@@ -352,7 +352,7 @@ def build_feed():
         return {el: round(v, 3) for el, v in out.items()}
 
     assays = caf(modal)
-    lib = LiberationState(degree={m: liberation_deg for m in modal})
+    lib = LiberationState(degree={m: liberation_from_p80(p80) for m in modal})
     feed = Stream(name="minerai_custom", solids_tph=feed_tph, modal=modal,
                   liberation=lib, p80_um=p80, assays=assays)
     return feed, prop_lookup, caf
@@ -408,19 +408,26 @@ if st.session_state.get("has_result"):
         if not params:
             st.info(t("no_sweep_param", lang))
         else:
-            csweep = st.selectbox(t("sweep_param", lang), options=params, key="sweep_simple")
+           # On affiche les libelles traduits mais 'csweep' reste la cle technique, car
+            # SEPARATION_SPECS et la fonction de courbe l'attendent : ainsi on traduit a
+            # l'affichage seulement.
+            csweep_display = [param_label(p, lang) for p in params]
+            csweep_picked = st.selectbox(t("sweep_param", lang), options=csweep_display,
+                                         key="sweep_simple")
+            csweep = params[csweep_display.index(csweep_picked)]
             rule = SEPARATION_SPECS[unit_type].get(csweep, {})
             vmin = float(rule.get("min", 0.0))
             vmax = float(rule.get("max", 1.0))
             c1, c2 = st.columns(2)
-            lo = c1.number_input(t("min_val", lang), value=vmin, key="lo_s")
-            hi = c2.number_input(t("max_val", lang), value=vmax, key="hi_s")
+            lo = c1.number_input(t("min_val", lang), value=vmin, key=f"lo_s_{csweep}")
+            hi = c2.number_input(t("max_val", lang), value=vmax, key=f"hi_s_{csweep}")
             if st.button(t("trace_curve", lang), key="trace_simple"):
                 pts = grade_recovery_simple(
                     feed, unit_type, settings, csweep, np.linspace(lo, hi, 12),
                     element, prop_lookup=prop_lookup, assay_func=assay_func)
                 plot_grade_recovery(pts, element, csweep,
-                                    t("gr_title_simple", lang, el=element, p=csweep))
+                                    t("gr_title_simple", lang, el=element, p=param_label(csweep, lang)),
+                                    sweep_label=param_label(csweep, lang))
 
         if unit_type == "flotation":
             st.markdown("---")
@@ -465,20 +472,25 @@ if st.session_state.get("has_result"):
         c1, c2, c3 = st.columns(3)
         target_conc = c1.selectbox(t("tracked_conc", lang), options=conc_names, key="tc")
         stage_lbl = c2.selectbox(t("stage_to_set", lang), options=stage_names, key="stg")
-        sweep_p = c3.selectbox(t("parameter", lang), options=["pulp_ph", "collector_gpt"], key="sp")
+        # Libelles traduits, cle technique conservee pour le calcul.
+        sweep_p_keys = ["pulp_ph", "collector_gpt"]
+        sweep_p_display = [param_label(k, lang) for k in sweep_p_keys]
+        sweep_p_picked = c3.selectbox(t("parameter", lang), options=sweep_p_display, key="sp")
+        sweep_p = sweep_p_keys[sweep_p_display.index(sweep_p_picked)]
         stage_index = stage_names.index(stage_lbl)
         d1, d2 = st.columns(2)
         default_min = 7.0 if sweep_p == "pulp_ph" else 20.0
         default_max = 11.5 if sweep_p == "pulp_ph" else 300.0
-        lo = d1.number_input(t("min_val", lang), value=default_min, key="lo_c")
-        hi = d2.number_input(t("max_val", lang), value=default_max, key="hi_c")
+        lo = d1.number_input(t("min_val", lang), value=default_min, key=f"lo_c_{sweep_p}")
+        hi = d2.number_input(t("max_val", lang), value=default_max, key=f"hi_c_{sweep_p}")
         if st.button(t("trace_curve", lang), key="trace_circuit"):
             pts = grade_recovery_circuit(
                 feed, stage_configs, stage_index, sweep_p, np.linspace(lo, hi, 12),
                 element, target_conc, prop_lookup=prop_lookup, assay_func=assay_func)
             plot_grade_recovery(
                 pts, element, sweep_p,
-                t("gr_title_circuit", lang, el=element, c=target_conc, p=sweep_p, s=stage_lbl))
+                t("gr_title_circuit", lang, el=element, c=target_conc, p=sweep_p, s=stage_lbl),
+                sweep_label=param_label(sweep_p, lang))
 else:
     if not use_custom_minerals and not is_circuit:
         st.info(t("info_configure", lang))
