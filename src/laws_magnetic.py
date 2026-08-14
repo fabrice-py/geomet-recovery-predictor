@@ -43,14 +43,18 @@ def magnetic_recovery(stream, threshold, sharpness, mineral_props=None):
     """
     recovery = {}
     for m in stream.modal:
-        # Categorie magnetique custom si fournie, sinon la base, car l'utilisateur peut
-        # definir des mineraux hors base : ainsi on lit sa valeur en priorite.
         if mineral_props is not None and m in mineral_props:
             cat = mineral_props[m]["magnetic"]
         else:
             cat = MINERAL_PROPERTIES[m]["magnetic"]
         chi = SUSCEPTIBILITY[cat]
-        recovery[m] = round(magnetic_capture(chi, threshold, sharpness), 4)
+        # Susceptibilite effective ponderee par la liberation, car un grain magnetique mal
+        # degage de sa gangue se comporte comme un composite moins magnetique : ainsi broyer
+        # fin (meilleure liberation) rapproche chi de sa valeur pleine et ameliore la capture.
+        lib = stream.liberation.degree.get(m, 0.85)
+        chi_diamag = SUSCEPTIBILITY["diamagnetique"]
+        chi_eff = lib * chi + (1 - lib) * chi_diamag
+        recovery[m] = round(magnetic_capture(chi_eff, threshold, sharpness), 4)
     return recovery
 
 
@@ -73,16 +77,19 @@ def magnetic_cutpoint(unit):
     else:  # WHIMS
         base_threshold = 0.22      # descend capter les paramagnétiques (0.35)
 
-    # Le champ ajuste le seuil autour de cette base, car un champ plus fort capte des
-    # minéraux moins magnétiques : ainsi monter le champ ABAISSE le seuil.
     field = s["field_tesla"]
     field_frac = (field - 0.05) / (2.0 - 0.05)
     threshold = base_threshold - 0.10 * field_frac
-
-    # La voie sèche trie moins finement les particules fines, car elles s'agglomèrent
-    # faute d'eau pour les disperser : ainsi la voie sèche est un peu moins raide.
-    sharpness = 25.0 if mode.endswith("wet") else 18.0
-
+    # La vitesse du tambour arbitre recuperation vs proprete, car un tambour rapide laisse
+    # moins de temps de capture et projette les particules faiblement retenues : ainsi
+    # monter la vitesse REMONTE le seuil (capte moins, mais concentre plus propre).
+    rpm = s["drum_speed_rpm"]
+    rpm_frac = (rpm - 10.0) / (120.0 - 10.0)          # 0 (lent) a 1 (rapide)
+    threshold = threshold + 0.08 * rpm_frac
+    # La voie seche trie moins finement les particules fines, car elles s'agglomerent
+    # faute d'eau pour les disperser : ainsi la voie seche est un peu moins raide. Un
+    # tambour rapide resserre aussi la coupure (plus selectif).
+    sharpness = (25.0 if mode.endswith("wet") else 18.0) + 8.0 * rpm_frac
     return round(threshold, 3), round(sharpness, 1)
 
 
