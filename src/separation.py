@@ -93,52 +93,62 @@ class SeparationUnit:
 def separate(stream, recovery_by_mineral, gold_recovery=None,
              conc_name="concentre", tail_name="rejet", assay_func=None):
     """
-    Partage d'un flux en concentré + rejet à partir d'une récupération par minéral, car
-    c'est l'opération commune à toutes les voies : ainsi chaque minéral voit sa masse
-    répartie selon son taux de récupération, puis on reconstruit entièrement les deux
-    flux de sortie (minéralogie, teneurs, libération).
+    Partage d'un flux en concentre + rejet a partir d'une recuperation par mineral, car
+    c'est l'operation commune a toutes les voies : ainsi chaque mineral voit sa masse
+    repartie selon son taux, puis on reconstruit entierement les deux flux de sortie.
 
-    gold_recovery : fraction 0-1 de l'or partant au concentré, car l'or n'est pas un
-    minéral de modal mais un traceur en g/t : ainsi on transporte le métal CONTENU
-    (g/t x masse) plutôt que la teneur, puis on recalcule la teneur de chaque produit.
+    gold_recovery : soit un float (fraction de l'or TOTAL au concentre), soit un dict par
+    MODE {"sulfide":.., "native":.., "gangue":..}, car chaque mode d'or a sa propre
+    recuperation (l'or des sulfures suit ses hotes, l'or natif a sa flottabilite, etc.) :
+    ainsi on repartit chaque mode separement et l'on reconstruit les sous-cles dans chaque
+    produit, ce qui permet a l'or de voyager correctement a travers un circuit.
     """
     minerals = list(stream.modal.keys())
-
-    # Masse de chaque minéral à l'alimentation, car tout le partage part de là.
     feed_mass = {m: stream.solids_tph * stream.modal[m] / 100.0 for m in minerals}
     conc_mass = {m: feed_mass[m] * recovery_by_mineral.get(m, 0.0) for m in minerals}
     tail_mass = {m: feed_mass[m] - conc_mass[m] for m in minerals}
 
-    # Or contenu à l'alimentation en grammes, car on conserve le métal et non la teneur :
-    # ainsi masse d'or = teneur (g/t) x masse solides (t).
-    au_feed_gt = stream.assays.get("Au_gt", 0.0)
-    au_total_g = au_feed_gt * stream.solids_tph
-    if gold_recovery is not None:
-        au_conc_g = au_total_g * gold_recovery
-        au_tail_g = au_total_g - au_conc_g
-    else:
-        au_conc_g = au_tail_g = 0.0
+    # Modes d'or transportes (en grammes contenus), car on conserve le metal et non la
+    # teneur : ainsi chaque mode est reparti selon son propre taux de recuperation.
+    au_modes = {
+        "sulfide": "Au_sulfide_gt",
+        "native": "Au_native_gt",
+        "gangue": "Au_gangue_recoverable_gt",
+    }
+    # Grammes de chaque mode a l'alimentation.
+    mode_feed_g = {mode: stream.assays.get(key, 0.0) * stream.solids_tph
+                   for mode, key in au_modes.items()}
 
-    def build(mass_dict, name, au_grams):
+    # Taux de recuperation par mode, car gold_recovery peut etre un float (meme taux pour
+    # tout) ou un dict (un taux par mode) : ainsi on normalise vers un dict.
+    if gold_recovery is None:
+        mode_rec = {mode: 0.0 for mode in au_modes}
+    elif isinstance(gold_recovery, dict):
+        mode_rec = {mode: float(gold_recovery.get(mode, 0.0)) for mode in au_modes}
+    else:
+        # Float : meme taux applique a tous les modes (compatibilite).
+        mode_rec = {mode: float(gold_recovery) for mode in au_modes}
+
+    # Grammes de chaque mode au concentre et au rejet.
+    mode_conc_g = {mode: mode_feed_g[mode] * mode_rec[mode] for mode in au_modes}
+    mode_tail_g = {mode: mode_feed_g[mode] - mode_conc_g[mode] for mode in au_modes}
+
+    def build(mass_dict, name, mode_grams):
         total = sum(mass_dict.values())
-        # Reconstruction de la minéralogie du flux de sortie, car les proportions changent
-        # après tri : ainsi on renormalise, en gérant le cas d'un flux vide.
         if total <= 1e-9:
             modal = {m: 0.0 for m in minerals}
             assays = {}
         else:
             modal = {m: round(mass_dict[m] / total * 100.0, 4) for m in minerals}
-            # Reconstruction des teneurs : fonction custom si fournie (mineraux hors base),
-            # sinon la stoechiometrie de la base, car un minerai custom a sa propre chimie.
             assays = assay_func(modal) if assay_func is not None else assays_from_modal(modal)
-            # Teneur en or du produit = or contenu / masse du produit, car l'or se
-            # reconcentre dans le flux qui capte les sulfures : ainsi un petit concentré
-            # riche en sulfures aura une teneur en or bien plus élevée que l'alimentation.
-            if au_grams > 0:
-                assays["Au_gt"] = round(au_grams / total, 3)
-        # La libération est portée telle quelle vers les deux produits (simplification
-        # Option A), car son EFFET sur le tri est déjà pris en compte dans la loi de
-        # récupération : ainsi la machinerie ne fait que déplacer la masse.
+            # Reconstruction des sous-cles d'or (teneur = grammes du mode / masse produit),
+            # car chaque mode se reconcentre differemment : ainsi les modes voyagent intacts.
+            au_total_g = sum(mode_grams.values())
+            if au_total_g > 0:
+                assays["Au_gt"] = round(au_total_g / total, 3)
+                assays["Au_sulfide_gt"] = round(mode_grams["sulfide"] / total, 3)
+                assays["Au_native_gt"] = round(mode_grams["native"] / total, 3)
+                assays["Au_gangue_recoverable_gt"] = round(mode_grams["gangue"] / total, 3)
         lib = LiberationState(degree=dict(stream.liberation.degree))
         return Stream(
             name=f"{stream.name}_{name}",
@@ -150,8 +160,10 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
             assays=assays,
         )
 
-    return (build(conc_mass, conc_name, au_conc_g),
-            build(tail_mass, tail_name, au_tail_g))
+    conc_modes = {mode: mode_conc_g[mode] for mode in au_modes}
+    tail_modes = {mode: mode_tail_g[mode] for mode in au_modes}
+    return (build(conc_mass, conc_name, conc_modes),
+            build(tail_mass, tail_name, tail_modes))
 
 
 if __name__ == "__main__":

@@ -105,24 +105,60 @@ def flotation_recovery(stream, unit, mineral_props=None):
 
 def gold_flotation_recovery(stream, mineral_recovery, unit):
     """
-    Récupération de l'or au concentré, car l'or réfractaire n'a pas de flottabilité
-    propre : ainsi il suit ses sulfures hôtes (moyenne pondérée par leur masse) tandis
-    que l'or libre flotte mal. En flottation inverse (minerai de fer), pas d'or à traiter.
+    Recuperation de l'or au concentre en flottation, selon ses trois modes, car chacun a un
+    comportement propre : ainsi l'or des sulfures suit ses hotes (pyrite/arseno), l'or natif
+    a sa flottabilite propre passee dans la cinetique (donc sensible aux reglages), et l'or
+    de gangue ne flotte quasiment pas. En flottation inverse (fer), pas d'or a traiter.
+
+    Renvoie une fraction 0-1 de l'or TOTAL partant au concentre (ce qu'attend separate()).
     """
     if unit.settings["collector_type"] == "amine_inverse":
         return 0.0
-    refr = stream.assays.get("Au_refractory_frac", None)
-    if refr is None:
-        return 0.0                                  # profil sans or
 
+    total_au = stream.assays.get("Au_gt", None)
+    if total_au is None or total_au <= 1e-9:
+        return 0.0
+
+    au_sulfide = stream.assays.get("Au_sulfide_gt", 0.0)
+    au_native = stream.assays.get("Au_native_gt", 0.0)
+    au_gangue_recov = stream.assays.get("Au_gangue_recoverable_gt", 0.0)
+
+    # 1) Or des sulfures : suit ses hotes (moyenne ponderee par leur masse), car il est pige
+    # dans pyrite/arseno : ainsi il flotte quand elles flottent -> sensible aux reglages via
+    # mineral_recovery des sulfures.
     hosts = ["arsenopyrite", "pyrite_co"]
     host_mass = {h: stream.modal.get(h, 0.0) for h in hosts}
     total_host = sum(host_mass.values())
     host_recovery = (sum(mineral_recovery.get(h, 0.0) * host_mass[h] for h in hosts)
                      / total_host) if total_host > 1e-9 else 0.0
 
-    free_gold_recovery = 0.20                       # l'or libre flotte mal en directe
-    return round(refr * host_recovery + (1 - refr) * free_gold_recovery, 4)
+    # 2) Or natif : flottabilite propre moderee, passee dans la MEME cinetique que les
+    # mineraux, car l'or natif flotte mais moins bien qu'attache a un sulfure : ainsi
+    # collecteur, dose, temps et moussant l'affectent (reglages actifs).
+    s = unit.settings
+    t = s["residence_min"]
+    dose_factor = 1.0 - math.exp(-s["collector_gpt"] / 80.0)
+    bell = rotor_bell_factor(s["rotor_speed_rpm"])
+    rmax_bonus = 0.10 * (1.0 - math.exp(-s["frother_gpt"] / 25.0))
+    native_floatab = 0.85   # or natif libere : bonne flottabilite (hydrophobe, xanthate), a calibrer
+    rmax_nat = min(0.98, 0.02 + 0.95 * (native_floatab ** 2) + rmax_bonus)
+    k_nat = (0.15 + 1.60 * native_floatab) * dose_factor * bell
+    native_recovery = kinetic_recovery(rmax_nat, k_nat, t)
+
+    # 3) Or de gangue RECUPERABLE : c'est de l'or LIBERE par le broyage, donc detache de la
+    # silice -> il se comporte comme de l'or natif nouvellement libere, et flotte comme lui
+    # (et non comme la gangue). Ainsi broyer fin ameliore la recuperation au lieu de la
+    # degrader : l'or libere devient flottable.
+    gangue_recovery = native_recovery
+
+    # On renvoie un taux PAR MODE (dict), car separate() repartit chaque mode d'or
+    # separement : ainsi l'or des sulfures suit ses hotes, l'or natif sa cinetique, etc.,
+    # et chaque mode voyage correctement a travers un circuit.
+    return {
+        "sulfide": round(host_recovery, 4),
+        "native": round(native_recovery, 4),
+        "gangue": round(gangue_recovery, 4),
+    }
 
 if __name__ == "__main__":
     # Test : flottation directe d'un minerai polymétallique, car on veut voir les
