@@ -323,6 +323,42 @@ with st.expander(t("grid_section", lang), expanded=False):
             st.warning(t("grid_min_warning", lang))
     except (ValueError, TypeError):
         st.warning(t("grid_invalid_warning", lang))
+        # ---- Mode PSD : generee (Rosin-Rammler depuis le P80) ou manuelle (saisie) ----
+    st.markdown("**" + t("psd_mode_label", lang) + "**")
+    psd_mode = st.radio(t("psd_mode_label", lang),
+                        [t("psd_mode_auto", lang), t("psd_mode_manual", lang)],
+                        horizontal=True, key="psd_mode", label_visibility="collapsed")
+    st.session_state["psd_manual_active"] = (psd_mode == t("psd_mode_manual", lang))
+    if st.session_state["psd_manual_active"]:
+        from size_classes import class_labels, p80_from_psd
+        grid_now = st.session_state["grid"]
+        labels_now = class_labels(grid_now)
+        # Tableau de saisie : une ligne par classe, % de masse editable.
+        # On initialise avec la PSD courante si compatible, sinon reparti uniformement.
+        prev = st.session_state.get("psd_manual_values")
+        if prev is None or len(prev) != len(labels_now):
+            prev = [round(100.0 / len(labels_now), 2)] * len(labels_now)
+        psd_df = pd.DataFrame({"classe": labels_now, "pct_masse": prev})
+        psd_edited = st.data_editor(
+            psd_df, use_container_width=True, key="psd_manual_editor",
+            disabled=["classe"],       # la colonne classe n'est pas editable
+            column_config={"classe": t("psd_class_col", lang),
+                           "pct_masse": t("psd_pct_col", lang)})
+        try:
+            vals = [max(0.0, float(x)) for x in psd_edited["pct_masse"].fillna(0.0)]
+            total_pct = sum(vals)
+            if total_pct > 1e-9:
+                psd_frac = [v / total_pct for v in vals]           # normalisation a 1
+                st.session_state["psd_manual_values"] = [round(v, 2) for v in vals]
+                st.session_state["psd_manual_curve"] = [round(f, 6) for f in psd_frac]
+                p80_manual = p80_from_psd(grid_now, psd_frac)
+                st.caption(t("psd_manual_info", lang, p80=p80_manual,
+                             tot=round(total_pct, 1)))
+            else:
+                st.warning(t("psd_manual_empty", lang))
+        except (ValueError, TypeError):
+            st.warning(t("psd_manual_invalid", lang))
+
 if use_custom_minerals:
     st.header(t("custom_def_header", lang))
     st.markdown("**" + t("table1_props", lang) + "**")
@@ -451,9 +487,17 @@ def build_feed():
     assay_func = None
     if profile_name is not None:
         feed = generate_feed(profile_name, n_samples=1, seed=42, feed_tph=feed_tph, grid=st.session_state["grid"])[0]
-        # Recalcule liberation ET distribution de l'or selon le P80 choisi, car le curseur
-        # doit reellement piloter la recuperation : ainsi le P80 de la sidebar devient actif.
-        apply_p80(feed, p80)
+        if st.session_state.get("psd_manual_active") and st.session_state.get("psd_manual_curve"):
+            # PSD imposee par l'utilisateur : on l'applique, on en derive le P80, puis on
+            # recalcule liberation et or sur ce P80 effectif (coherence PSD -> P80 -> modele).
+            feed.psd_curve = list(st.session_state["psd_manual_curve"])
+            from size_classes import p80_from_psd
+            p80_eff = p80_from_psd(st.session_state["grid"], feed.psd_curve)
+            apply_p80(feed, p80_eff, grid=st.session_state["grid"])
+            feed.psd_curve = list(st.session_state["psd_manual_curve"])  # apply_p80 la reconstruit, on re-impose la saisie
+        else:
+            # Recalcule liberation ET distribution de l'or selon le P80 du curseur.
+            apply_p80(feed, p80)
         return feed, prop_lookup, assay_func
     if custom_modal is not None:
         total = sum(custom_modal.values())

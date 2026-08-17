@@ -149,7 +149,15 @@ TRANSLATIONS = {
     "return_to_stage": {"fr": "Retourne vers", "en": "Returns to"},
     "returns_need_two": {"fr": "Ajoutez au moins 2 etages pour definir un retour.",
                         "en": "Add at least 2 stages to define a recycle."},
-
+"psd_mode_label": {"fr": "Distribution granulometrique", "en": "Size distribution"},
+    "psd_mode_auto": {"fr": "Generee (P80)", "en": "Generated (P80)"},
+    "psd_mode_manual": {"fr": "Manuelle (saisie)", "en": "Manual (entry)"},
+    "psd_class_col": {"fr": "Classe", "en": "Class"},
+    "psd_pct_col": {"fr": "% masse", "en": "% mass"},
+    "psd_manual_info": {"fr": "PSD saisie : P80 derive = {p80} um (total saisi {tot}%, normalise a 100%).",
+                        "en": "Entered PSD: derived P80 = {p80} um (entered total {tot}%, normalized to 100%)."},
+    "psd_manual_empty": {"fr": "Entrez au moins une proportion non nulle.", "en": "Enter at least one non-zero proportion."},
+    "psd_manual_invalid": {"fr": "Valeurs invalides : entrez des nombres.", "en": "Invalid values: enter numbers."},
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {
