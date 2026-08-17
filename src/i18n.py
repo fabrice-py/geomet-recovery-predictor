@@ -57,6 +57,12 @@ TRANSLATIONS = {
     "psd_massfrac_axis": {"fr": "Fraction massique (%)", "en": "Mass fraction (%)"},
     "psd_cum_title": {"fr": "Passant cumule (P80 = {p80} um)", "en": "Cumulative passing (P80 = {p80} um)"},
     "psd_freq_title": {"fr": "Distribution massique (P80 = {p80} um)", "en": "Mass distribution (P80 = {p80} um)"},
+    "grid_section": {"fr": "Grille granulometrique", "en": "Size grid"},
+    "grid_caption": {"fr": "Bornes de tamis (um), decroissantes. S'applique a tout le flowsheet.",
+                     "en": "Sieve boundaries (um), decreasing. Applies to the whole flowsheet."},
+    "grid_min_warning": {"fr": "Il faut au moins 2 bornes valides.",
+                         "en": "At least 2 valid boundaries are required."},
+    "grid_invalid_warning": {"fr": "Grille invalide : entrez des nombres positifs.", "en": "Invalid grid: enter positive numbers."},
     # ----- Sidebar : metal d'interet -----
     "metal_header": {"fr": "2. Metal d'interet", "en": "2. Metal of interest"},
     "metal_followed": {"fr": "Metal suivi (recuperations et courbe)",

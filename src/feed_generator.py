@@ -18,13 +18,16 @@ from data_models import Stream, LiberationState
 from mineralogy import ORE_PROFILES, assays_from_modal
 from size_classes import DEFAULT_GRID_UM, make_psd_rosin_rammler, p80_from_psd
 
-def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
-                  seed=42, feed_tph=100.0, assay_noise_pct=0.0):
+def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500, seed=42, feed_tph=100.0, assay_noise_pct=0.0, grid=None):
     """
     Génération de n flux d'alimentation pour un profil donné, car chaque flux doit
     être un échantillon cohérent : ainsi on tire d'abord la minéralogie, puis on en
     dérive les teneurs, la libération et la pulpe.
     """
+    # Grille granulometrique active, car l'utilisateur peut la redefinir : ainsi on genere
+    # les PSD sur SA grille, en retombant sur la grille par defaut si rien n'est fourni.
+    if grid is None:
+        grid = DEFAULT_GRID_UM
     if profile_name not in ORE_PROFILES:
         raise ValueError(f"Profil inconnu : {profile_name}. "
                          f"Choix possibles : {list(ORE_PROFILES)}")
@@ -79,8 +82,8 @@ def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
         # PSD initiale construite par Rosin-Rammler a partir du P80 tire, car la PSD est
         # desormais la verite granulometrique : ainsi le P80 stocke est DERIVE de la PSD
         # (coherence), et le broyeur/cyclone pourront manipuler la distribution.
-        psd_i = make_psd_rosin_rammler(DEFAULT_GRID_UM, float(p80[i]), m=1.0)
-        p80_derived = p80_from_psd(DEFAULT_GRID_UM, psd_i)
+        psd_i = make_psd_rosin_rammler(grid, float(p80[i]), m=1.0)
+        p80_derived = p80_from_psd(grid, psd_i)
         stream = Stream(
             name=f"{profile_name}_feed_{i + 1}",
             solids_tph=feed_tph,
@@ -159,18 +162,21 @@ def streams_to_dataframe(streams):
         rows.append(row)
     return pd.DataFrame(rows)
 
-def apply_p80(stream, p80):
+def apply_p80(stream, p80, grid=None):
+    if grid is None:
+        grid = DEFAULT_GRID_UM
     """
     Recalcule la liberation et la distribution de l'or d'un flux pour un P80 donne, car le
     P80 regle par l'utilisateur doit reellement piloter la liberation (et donc les
     recuperations) : ainsi on refait, de façon deterministe, ce que generate_feed calcule,
     mais avec le P80 effectif. Modifie le flux en place.
     """
+
     p80 = float(np.clip(p80, 10, 300))
     # La PSD est la verite : on la reconstruit pour le P80 vise (Rosin-Rammler), puis on
     # redecoule le P80 de la PSD, car changer la finesse revient a changer la distribution.
-    stream.psd_curve = make_psd_rosin_rammler(DEFAULT_GRID_UM, p80, m=1.0)
-    p80_eff = p80_from_psd(DEFAULT_GRID_UM, stream.psd_curve)
+    stream.psd_curve = make_psd_rosin_rammler(grid, p80, m=1.0)
+    p80_eff = p80_from_psd(grid, stream.psd_curve)
     fineness = 1 - (p80_eff - 45) / (300 - 45)
     fineness = float(np.clip(fineness, 0.0, 1.0))
     stream.p80_um = round(p80_eff, 1)

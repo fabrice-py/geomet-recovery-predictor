@@ -80,7 +80,11 @@ lang = LANGUAGES[lang_label]
 
 st.title(t("app_title", lang))
 st.caption(t("app_caption", lang))
-
+# Grille granulometrique active du flowsheet, car l'utilisateur peut la redefinir : ainsi
+# toutes les PSD sont generees sur SA grille (initialisee a la grille par defaut).
+from size_classes import DEFAULT_GRID_UM
+if "grid" not in st.session_state:
+    st.session_state["grid"] = list(DEFAULT_GRID_UM)
 
 # ============================ FONCTIONS PARTAGEES ============================
 def apply_unit_ui(stream, unit, prop_lookup=None, assay_func=None,
@@ -304,6 +308,21 @@ lancer = st.sidebar.button(t("run", lang), type="primary")
 # ============================ ZONE PRINCIPALE : SAISIE ============================
 custom_props = None
 custom_chem = None
+# ---- Grille granulometrique (commune a tout le flowsheet) ----
+with st.expander(t("grid_section", lang), expanded=False):
+    st.caption(t("grid_caption", lang))
+    grid_df = pd.DataFrame({"borne_um": st.session_state["grid"]})
+    grid_edited = st.data_editor(grid_df, num_rows="dynamic",
+                                 use_container_width=True, key="grid_editor")
+    try:
+        new_grid = sorted([float(x) for x in grid_edited["borne_um"].dropna()
+                           if float(x) > 0], reverse=True)
+        if len(new_grid) >= 2:
+            st.session_state["grid"] = new_grid
+        else:
+            st.warning(t("grid_min_warning", lang))
+    except (ValueError, TypeError):
+        st.warning(t("grid_invalid_warning", lang))
 if use_custom_minerals:
     st.header(t("custom_def_header", lang))
     st.markdown("**" + t("table1_props", lang) + "**")
@@ -376,7 +395,7 @@ def build_feed():
     prop_lookup = None
     assay_func = None
     if profile_name is not None:
-        feed = generate_feed(profile_name, n_samples=1, seed=42, feed_tph=feed_tph)[0]
+        feed = generate_feed(profile_name, n_samples=1, seed=42, feed_tph=feed_tph, grid=st.session_state["grid"])[0]
         # Recalcule liberation ET distribution de l'or selon le P80 choisi, car le curseur
         # doit reellement piloter la recuperation : ainsi le P80 de la sidebar devient actif.
         apply_p80(feed, p80)
@@ -466,7 +485,7 @@ if st.session_state.get("has_result"):
     if feed.psd_curve is not None:
         st.subheader(t("psd_section", lang))
         from size_classes import DEFAULT_GRID_UM, class_labels
-        grid = DEFAULT_GRID_UM
+        grid = st.session_state["grid"]
         labels = class_labels(grid)
         view = st.radio(t("psd_view", lang),
                         [t("psd_view_freq", lang), t("psd_view_cum", lang)],
