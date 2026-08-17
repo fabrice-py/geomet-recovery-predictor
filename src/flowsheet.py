@@ -132,3 +132,168 @@ def has_cycle(flowsheet):
         if color[n] == WHITE and dfs(n):
             return True
     return False
+
+import copy
+
+def apply_node(unit_type, settings, feed_stream, prop_lookup=None, assay_func=None,
+               grid=None, apply_p80_func=None):
+    """
+    Applique la physique d'un noeud a son flux d'entree et renvoie ses sorties NOMMEES, car
+    le solveur graphe raisonne en sorties (concentre/rejet, overflow/underflow, out) : ainsi
+    on aiguille vers la bonne loi (les MEMES que run_series) et l'on renvoie un dict
+    {nom_sortie: flux}. Aucune physique n'est reecrite ici, seulement routee.
+    """
+    # Imports locaux, car flowsheet ne doit pas dependre de circuit au chargement.
+    from separation import SeparationUnit
+    from circuit import apply_unit
+    from comminution import grind_stream
+    from classification import classify_stream
+
+    if unit_type == "ball_mill":
+        ground = copy.deepcopy(feed_stream)
+        grind_stream(ground, work_index=settings.get("work_index", 15.0),
+                     energy_kwht=settings.get("energy_kwht", 10.0),
+                     grid=grid, apply_p80_func=apply_p80_func)
+        return {"out": ground}
+
+    if unit_type == "hydrocyclone":
+        over, under = classify_stream(
+            feed_stream, diameter_cm=settings.get("diameter_cm", 15.0),
+            pressure_kpa=settings.get("pressure_kpa", 100.0), grid=grid,
+            apply_p80_func=apply_p80_func)
+        return {"overflow": over, "underflow": under}
+
+    # Separateurs classiques (gravite, magnetique, flottation).
+    unit = SeparationUnit(unit_type, settings)
+    conc, tail = apply_unit(feed_stream, unit, prop_lookup=prop_lookup, assay_func=assay_func)
+    return {"concentre": conc, "rejet": tail}
+
+def merge_streams(streams, grid=None):
+    """
+    Additionne plusieurs flux en un seul, car un noeud peut recevoir plusieurs alimentations
+    (ex. alimentation fraiche + charge circulante de retour) : ainsi on somme les masses par
+    mineral, on recombine les PSD ponderees par la masse, et l'on reconstruit un flux unique.
+    """
+    from data_models import Stream, LiberationState
+    from mineralogy import assays_from_modal
+    from size_classes import p80_from_psd, DEFAULT_GRID_UM
+    if grid is None:
+        grid = DEFAULT_GRID_UM
+    streams = [s for s in streams if s is not None and s.solids_tph > 1e-12]
+    if not streams:
+        return None
+    if len(streams) == 1:
+        return copy.deepcopy(streams[0])
+
+    total_mass = sum(s.solids_tph for s in streams)
+    # Masse par mineral = somme des (fraction modale x masse) de chaque flux.
+    minerals = set()
+    for s in streams:
+        minerals.update(s.modal.keys())
+    mineral_mass = {m: 0.0 for m in minerals}
+    for s in streams:
+        for m, pct in s.modal.items():
+            mineral_mass[m] += pct / 100.0 * s.solids_tph
+    modal = {m: round(mineral_mass[m] / total_mass * 100.0, 4) for m in minerals}
+
+    # PSD ponderee par la masse, car chaque flux apporte sa distribution : ainsi la PSD
+    # resultante est la moyenne massique classe par classe.
+    psd = None
+    if all(s.psd_curve is not None for s in streams):
+        n_classes = len(streams[0].psd_curve)
+        psd = [0.0] * n_classes
+        for s in streams:
+            for i in range(n_classes):
+                psd[i] += s.psd_curve[i] * s.solids_tph
+        psd = [round(p / total_mass, 6) for p in psd]
+
+    # Liberation ponderee par la masse (approximation raisonnable).
+    lib_deg = {}
+    for m in minerals:
+        num = sum(s.liberation.degree.get(m, 0.0) * s.solids_tph for s in streams)
+        lib_deg[m] = round(num / total_mass, 3)
+
+    assays = assays_from_modal(modal)
+    merged = Stream(
+        name="merge",
+        solids_tph=round(total_mass, 4),
+        modal=modal,
+        liberation=LiberationState(degree=lib_deg),
+        p80_um=round(p80_from_psd(grid, psd), 1) if psd else streams[0].p80_um,
+        psd_curve=psd,
+        pct_solids_mass=streams[0].pct_solids_mass,
+        assays=assays,
+    )
+    return merged
+
+
+def solve_once(flowsheet, feed, prop_lookup=None, assay_func=None,
+               grid=None, apply_p80_func=None, incoming_override=None):
+    """
+    Resout un flowsheet SANS boucle en une passe, car sans charge circulante l'ordre de
+    calcul existe toujours (tri topologique) : ainsi chaque noeud est calcule quand ses
+    alimentations sont pretes, et ses sorties sont routees vers les destinataires.
+    incoming_override : pour le futur solveur iteratif, flux de retour a injecter au depart.
+    Retour : dict {node_id: {nom_sortie: flux}} + les flux FINAL collectes.
+    """
+    nodes = flowsheet["nodes"]
+    conns = flowsheet["connections"]
+
+    # Adjacence : pour router les sorties. dest_of[(node, out)] = liste de noeuds destinataires.
+    dest_of = {}
+    for c in conns:
+        dest_of.setdefault(c["from"], []).append(c["to"])
+
+    # Alimentations en attente par noeud : liste de flux recus.
+    incoming = {n: [] for n in nodes}
+    if incoming_override:
+        for n, streams in incoming_override.items():
+            incoming[n].extend(streams)
+    # Le FEED alimente ses destinataires.
+    for dst in dest_of.get((FEED_NODE, "out"), []):
+        if dst != FINAL_SINK:
+            incoming[dst].append(feed)
+
+    # Ordre topologique (Kahn), car un noeud n'est calculable que quand toutes ses entrees
+    # sont connues : ainsi on traite les noeuds sans dependance en attente d'abord.
+    # On compte, par noeud, combien de connexions entrantes viennent d'autres NOEUDS (pas FEED).
+    from collections import deque
+    in_deg = {n: 0 for n in nodes}
+    for c in conns:
+        src = c["from"][0]
+        dst = c["to"]
+        if dst != FINAL_SINK and src != FEED_NODE:
+            in_deg[dst] += 1
+    # Les noeuds alimentes uniquement par FEED (ou override) demarrent.
+    queue = deque([n for n in nodes if in_deg[n] == 0])
+
+    node_outputs = {}
+    finals = []
+
+    while queue:
+        node_id = queue.popleft()
+        node = nodes[node_id]
+        feed_in = merge_streams(incoming[node_id], grid=grid)
+        if feed_in is None:
+            # Noeud sans alimentation (flux nul) : on produit des sorties vides ignorables.
+            node_outputs[node_id] = {}
+        else:
+            outs = apply_node(node["unit_type"], node["settings"], feed_in,
+                              prop_lookup=prop_lookup, assay_func=assay_func,
+                              grid=grid, apply_p80_func=apply_p80_func)
+            node_outputs[node_id] = outs
+            # Router chaque sortie vers ses destinataires.
+            for out_name, stream in outs.items():
+                for dst in dest_of.get((node_id, out_name), []):
+                    if dst == FINAL_SINK:
+                        finals.append((f"{node_id}_{out_name}", stream))
+                    else:
+                        incoming[dst].append(stream)
+        # Decrementer les dependances des destinataires.
+        for c in conns:
+            if c["from"][0] == node_id and c["to"] != FINAL_SINK:
+                in_deg[c["to"]] -= 1
+                if in_deg[c["to"]] == 0:
+                    queue.append(c["to"])
+
+    return {"node_outputs": node_outputs, "finals": finals}
