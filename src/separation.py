@@ -55,6 +55,10 @@ SEPARATION_SPECS = {
         "depressed_minerals": {"default": []},
         "activated_minerals": {"default": []},
     },
+    "ball_mill": {
+        "work_index": {"min": 5.0, "max": 25.0, "default": 15.0},
+        "energy_kwht": {"min": 5.0, "max": 30.0, "default": 10.0},
+    },
     "hydrocyclone": {
         "diameter_cm": {"min": 5.0, "max": 50.0, "default": 15.0},
         "pressure_kpa": {"min": 20.0, "max": 300.0, "default": 100.0},
@@ -160,6 +164,7 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
             modal=modal,
             liberation=lib,
             p80_um=stream.p80_um,
+            psd_curve=stream.psd_curve,
             pct_solids_mass=stream.pct_solids_mass,
             assays=assays,
         )

@@ -129,6 +129,15 @@ TRANSLATIONS = {
               "partition_title": {"fr": "Courbe de partage (Tromp)", "en": "Partition curve (Tromp)"},
     "partition_size_axis": {"fr": "Taille des particules (um)", "en": "Particle size (um)"},
     "partition_yaxis": {"fr": "Probabilite vers la sousverse (%)", "en": "Probability to underflow (%)"},
+
+"cc_converged": {"fr": "Charge circulante convergee en {n} iterations (debit boucle : {load} t/h).",
+                     "en": "Circulating load converged in {n} iterations (loop flow: {load} t/h)."},
+    "cc_diverged": {"fr": "Le circuit ne converge pas (charge circulante qui s'emballe). Revoyez les reglages.",
+                    "en": "Circuit does not converge (circulating load diverging). Review settings."},
+    "cc_too_high": {"fr": "Charge circulante excessive (>10x l'alimentation). Circuit ingerable, revoyez les reglages.",
+                    "en": "Excessive circulating load (>10x feed). Unmanageable circuit, review settings."},
+    "cc_max_iter": {"fr": "Convergence non atteinte apres {n} iterations. Resultat approximatif.",
+                    "en": "Convergence not reached after {n} iterations. Approximate result."},
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {

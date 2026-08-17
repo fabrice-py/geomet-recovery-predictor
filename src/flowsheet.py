@@ -268,14 +268,15 @@ def solve_once(flowsheet, feed, prop_lookup=None, assay_func=None,
     queue = deque([n for n in nodes if in_deg[n] == 0])
 
     node_outputs = {}
+    node_feeds = {}
     finals = []
 
     while queue:
         node_id = queue.popleft()
         node = nodes[node_id]
         feed_in = merge_streams(incoming[node_id], grid=grid)
+        node_feeds[node_id] = feed_in
         if feed_in is None:
-            # Noeud sans alimentation (flux nul) : on produit des sorties vides ignorables.
             node_outputs[node_id] = {}
         else:
             outs = apply_node(node["unit_type"], node["settings"], feed_in,
@@ -296,7 +297,7 @@ def solve_once(flowsheet, feed, prop_lookup=None, assay_func=None,
                 if in_deg[c["to"]] == 0:
                     queue.append(c["to"])
 
-    return {"node_outputs": node_outputs, "finals": finals}
+    return {"node_outputs": node_outputs, "finals": finals, "node_feeds": node_feeds}
 
 def find_tear_edges(flowsheet):
     """
@@ -426,6 +427,119 @@ def solve_iterative(flowsheet, feed, prop_lookup=None, assay_func=None,
 
     converged = (status == "converged")
     return {"node_outputs": res["node_outputs"], "finals": res["finals"],
+            "node_feeds": res.get("node_feeds", {}),
             "n_iter": n_iter, "converged": converged, "status": status,
             "tear_debits": prev_debits if converged else [round(d, 2) for d in new_debits],
             "n_tears": len(tears), "history": history}
+def run_series_as_graph(feed, stages, prop_lookup=None, assay_func=None,
+                        grid=None, apply_p80_func=None, returns=None):
+    """
+    Execute une liste d'etages (multi-voies) via le moteur GRAPHE, car on veut un moteur
+    unique qui gere aussi bien la serie que les boucles : ainsi on construit un flowsheet
+    ou chaque etage alimente le suivant (serie), plus d'eventuels RETOURS (charge circulante),
+    puis on resout par point fixe. Le resultat est remis au format de run_series pour ne pas
+    bouleverser l'affichage.
+
+    stages : liste de dicts {name, unit_type, settings, ...} (ordre = serie).
+    returns : liste optionnelle de retours {"from_stage": nom, "from_output": nom_sortie,
+              "to_stage": nom} decrivant une sortie qui reboucle vers un etage anterieur.
+
+    Retour : dict facon run_series (concentrates, final_tail, stage_feeds) + infos graphe
+    (mill_outputs, cyclone_outputs, circulating : statut/iterations/debit).
+    """
+    # 1) Construire les noeuds.
+    nodes = {}
+    for s in stages:
+        nodes[s["name"]] = {"unit_type": s["unit_type"], "settings": s["settings"]}
+
+    # 2) Determiner les sorties qui sont "detournees" par un retour (pour ne pas les router
+    # aussi en serie), car une sortie rebouclee ne continue pas vers l'etage suivant.
+    returns = returns or []
+    diverted = set()   # (stage_name, output_name) detournes vers un retour
+    for r in returns:
+        diverted.add((r["from_stage"], r["from_output"]))
+
+    # 3) Construire les connexions.
+    conns = []
+    names = [s["name"] for s in stages]
+    # Alimentation : le FEED alimente le premier etage.
+    if names:
+        conns.append({"from": (FEED_NODE, "out"), "to": names[0]})
+
+    for idx, s in enumerate(stages):
+        name = s["name"]
+        outs = outputs_of(s["unit_type"])
+        # La sortie "principale" qui continue en serie depend du type d'unite.
+        if s["unit_type"] == "ball_mill":
+            main_out = "out"
+        elif s["unit_type"] == "hydrocyclone":
+            main_out = s["settings"].get("continue_flux", "overflow")
+        else:
+            main_out = "concentre"   # separateurs : le concentre continue ? Non -> voir note
+        # NOTE serie multi-voies actuelle : le flux qui CONTINUE est le REJET pour les
+        # separateurs (le concentre sort), et la sortie choisie pour cyclone/broyeur.
+        if s["unit_type"] in ("shaking_table", "spiral", "falcon", "magnetic", "flotation"):
+            continue_out = "rejet"       # le rejet alimente l'etage suivant (le concentre sort)
+        else:
+            continue_out = main_out
+
+        for out in outs:
+            key = (name, out)
+            if key in diverted:
+                continue   # cette sortie part dans un retour, gere plus bas
+            if out == continue_out and idx < len(stages) - 1:
+                # continue vers l'etage suivant
+                conns.append({"from": key, "to": names[idx + 1]})
+            else:
+                # sort du circuit
+                conns.append({"from": key, "to": FINAL_SINK})
+
+    # 4) Ajouter les retours (boucles).
+    for r in returns:
+        conns.append({"from": (r["from_stage"], r["from_output"]), "to": r["to_stage"]})
+
+    fs = make_flowsheet(nodes, conns)
+
+    # 5) Resoudre (iteratif : gere serie ET boucles).
+    res = solve_iterative(fs, feed, prop_lookup=prop_lookup, assay_func=assay_func,
+                          grid=grid, apply_p80_func=apply_p80_func)
+
+    # 6) Remettre au format run_series : concentrates, final_tail, stage_feeds.
+    node_outputs = res["node_outputs"]
+    concentrates = {}
+    mill_outputs = {}
+    cyclone_outputs = {}
+    for s in stages:
+        name = s["name"]
+        outs = node_outputs.get(name, {})
+        if s["unit_type"] == "ball_mill":
+            if "out" in outs:
+                mill_outputs[name] = outs["out"]
+        elif s["unit_type"] == "hydrocyclone":
+            cyclone_outputs[name] = {"overflow": outs.get("overflow"),
+                                     "underflow": outs.get("underflow")}
+            # produit sortant = le flux NON continue
+            cont = s["settings"].get("continue_flux", "overflow")
+            other = "underflow" if cont == "overflow" else "overflow"
+            if outs.get(other) is not None:
+                concentrates[f"{name}_{other}"] = outs[other]
+        else:
+            if outs.get("concentre") is not None:
+                concentrates[name] = outs["concentre"]
+
+    # final_tail = le rejet du dernier separateur, ou le dernier flux serie. Approximation :
+    # on prend le flux FINAL de plus grande masse qui n'est pas un concentre nomme.
+    final_tail = None
+    for fname, stream in res["finals"]:
+        if fname.endswith("_rejet"):
+            final_tail = stream
+    if final_tail is None and res["finals"]:
+        final_tail = max((s for _, s in res["finals"]), key=lambda x: x.solids_tph)
+
+    # stage_feeds : flux d'entree reel de chaque etage (expose par le moteur graphe), car
+    # les courbes par etage et l'affichage broyeur en ont besoin.
+    stage_feeds = res.get("node_feeds", {})
+
+    return {"concentrates": concentrates, "final_tail": final_tail,
+            "stage_feeds": stage_feeds, "mill_outputs": mill_outputs,
+            "cyclone_outputs": cyclone_outputs, "circulating": res}

@@ -517,14 +517,28 @@ if st.session_state.get("has_result"):
         mode = "cum" if view == t("psd_view_cum", lang) else "freq"
         plot_psd(grid, feed.psd_curve, feed.p80_um, mode, lang)
     if res_is_multi:
-        # Circuit multi-voies : execution via run_series sur des SeparationUnit heterogenes.
-        from circuit import run_series
+        # Circuit multi-voies : execution via le moteur GRAPHE (gere serie ET boucles).
+        from flowsheet import run_series_as_graph
         stages = st.session_state["multi_stages"]
-        stage_units = [(s["name"], SeparationUnit(s["unit_type"], s["settings"])) for s in stages]
-        result = run_series(feed, stage_units, prop_lookup=prop_lookup, assay_func=assay_func, grid=st.session_state["grid"], apply_p80_func=apply_p80)
+        returns = st.session_state.get("multi_returns", [])
+        result = run_series_as_graph(feed, stages, prop_lookup=prop_lookup,
+                                     assay_func=assay_func, grid=st.session_state["grid"],
+                                     apply_p80_func=apply_p80, returns=returns)
         concentrates = result["concentrates"]
         tail = result["final_tail"]
         stage_feeds = result["stage_feeds"]
+        circ = result["circulating"]
+        # Affichage de la charge circulante si boucle(s).
+        if circ["n_tears"] > 0:
+            if circ["status"] == "converged":
+                st.success(t("cc_converged", lang, n=circ["n_iter"],
+                             load=round(sum(circ["tear_debits"]), 1)))
+            elif circ["status"] == "diverged":
+                st.error(t("cc_diverged", lang))
+            elif circ["status"] == "circulating_load_too_high":
+                st.error(t("cc_too_high", lang))
+            else:
+                st.warning(t("cc_max_iter", lang, n=circ["n_iter"]))
 
         # Un bloc de resultats par etage, car chaque etage a sa voie et son metal suivi :
         # ainsi on lit la performance de chaque etage sur SON metal d'interet.
@@ -593,14 +607,22 @@ if st.session_state.get("has_result"):
                 cc1, cc2 = st.columns(2)
                 lo_i = cc1.number_input(t("min_val", lang), value=vmin_i, key=f"mlo_{name}_{csweep_i}")
                 hi_i = cc2.number_input(t("max_val", lang), value=vmax_i, key=f"mhi_{name}_{csweep_i}")
+                # Persistance : un clic MEMORISE la demande de courbe pour cet etage, car
+                # Streamlit reexecute tout le script a chaque clic : ainsi les courbes des
+                # autres etages ne disparaissent plus (on les reaffiche depuis la session).
                 if st.button(t("trace_curve", lang), key=f"mtrace_{name}"):
+                    st.session_state[f"curve_{name}"] = {
+                        "sweep": csweep_i, "lo": lo_i, "hi": hi_i, "metal": metal_i}
+                curve_req = st.session_state.get(f"curve_{name}")
+                if curve_req is not None:
                     pts_i = grade_recovery_simple(
-                        stage_feed, s["unit_type"], s["settings"], csweep_i,
-                        np.linspace(lo_i, hi_i, 12), metal_i,
+                        stage_feed, s["unit_type"], s["settings"], curve_req["sweep"],
+                        np.linspace(curve_req["lo"], curve_req["hi"], 12), curve_req["metal"],
                         prop_lookup=prop_lookup, assay_func=assay_func)
-                    plot_grade_recovery(pts_i, metal_i, csweep_i,
-                                        t("gr_title_simple", lang, el=metal_i, p=param_label(csweep_i, lang)),
-                                        sweep_label=param_label(csweep_i, lang))
+                    plot_grade_recovery(pts_i, curve_req["metal"], curve_req["sweep"],
+                                        t("gr_title_simple", lang, el=curve_req["metal"],
+                                          p=param_label(curve_req["sweep"], lang)),
+                                        sweep_label=param_label(curve_req["sweep"], lang))
             st.markdown("---")
         st.markdown(f"### {t('final_tail', lang)}")
         perf_table(feed, [(t("final_tail", lang), tail)], element)
