@@ -297,3 +297,108 @@ def solve_once(flowsheet, feed, prop_lookup=None, assay_func=None,
                     queue.append(c["to"])
 
     return {"node_outputs": node_outputs, "finals": finals}
+
+def find_tear_edges(flowsheet):
+    """
+    Identifie les connexions de RETOUR (tear streams) qui ferment les boucles, car pour
+    resoudre un circuit ferme on coupe ces flux, on les suppose vides au depart, puis on
+    itere : ainsi le circuit devient calculable en une passe a chaque tour. On repere les
+    aretes qui pointent vers un noeud deja dans la pile DFS courante (arete arriere).
+    Retour : liste de connexions (dicts) considerees comme tears.
+    """
+    nodes = flowsheet["nodes"]
+    conns = flowsheet["connections"]
+    # Adjacence noeud -> liste de (noeud_destination, connexion).
+    adj = {n: [] for n in nodes}
+    adj[FEED_NODE] = []
+    for c in conns:
+        src = c["from"][0]
+        dst = c["to"]
+        if dst != FINAL_SINK:
+            adj.setdefault(src, []).append((dst, c))
+
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {n: WHITE for n in adj}
+    tears = []
+
+    def dfs(u):
+        color[u] = GRAY
+        for v, conn in adj.get(u, []):
+            if color.get(v, WHITE) == GRAY:
+                tears.append(conn)          # arete arriere -> ferme une boucle -> tear
+            elif color.get(v, WHITE) == WHITE:
+                dfs(v)
+        color[u] = BLACK
+
+    for n in adj:
+        if color[n] == WHITE:
+            dfs(n)
+    return tears
+
+
+def solve_iterative(flowsheet, feed, prop_lookup=None, assay_func=None,
+                    grid=None, apply_p80_func=None, tol=0.001, max_iter=100):
+    """
+    Resout un flowsheet AVEC boucles par iteration de point fixe (methode du tear stream),
+    car un circuit ferme est circulaire : ainsi on coupe les flux de retour, on les suppose
+    vides, puis on recalcule en injectant a chaque tour le tear estime au tour precedent,
+    jusqu'a stabilisation du debit (charge circulante convergee).
+    tol : variation relative de debit du tear en dessous de laquelle on considere converge.
+    Retour : dict avec node_outputs, finals, n_iter, converged, et le debit du/des tears.
+    """
+    tears = find_tear_edges(flowsheet)
+
+    # Flowsheet "coupe" : on retire les connexions tears pour le calcul en une passe.
+    cut_conns = [c for c in flowsheet["connections"] if c not in tears]
+    cut_fs = {"nodes": flowsheet["nodes"], "connections": cut_conns}
+
+    # Etat initial : chaque tear apporte un flux vide (None) a son noeud destinataire.
+    tear_streams = {i: None for i in range(len(tears))}
+
+    prev_debits = [0.0] * len(tears)
+    converged = False
+    n_iter = 0
+
+    for it in range(max_iter):
+        n_iter = it + 1
+        # Construction des injections : pour chaque tear, son flux estime va vers sa destination.
+        incoming_override = {}
+        for i, tear in enumerate(tears):
+            stream = tear_streams[i]
+            if stream is not None:
+                dst = tear["to"]
+                incoming_override.setdefault(dst, []).append(stream)
+
+        # Calcul en une passe avec les tears injectes.
+        res = solve_once(cut_fs, feed, prop_lookup=prop_lookup, assay_func=assay_func,
+                         grid=grid, apply_p80_func=apply_p80_func,
+                         incoming_override=incoming_override)
+
+        # Mise a jour des tears : on relit le flux reel produit a la source de chaque tear.
+        new_debits = []
+        for i, tear in enumerate(tears):
+            src_node, src_out = tear["from"]
+            outs = res["node_outputs"].get(src_node, {})
+            stream = outs.get(src_out)
+            tear_streams[i] = stream
+            new_debits.append(stream.solids_tph if stream is not None else 0.0)
+
+        # Convergence : variation relative du debit de chaque tear sous le seuil.
+        max_rel = 0.0
+        for i in range(len(tears)):
+            d_new = new_debits[i]
+            d_old = prev_debits[i]
+            if d_new > 1e-9:
+                rel = abs(d_new - d_old) / d_new
+                max_rel = max(max_rel, rel)
+            elif d_old > 1e-9:
+                max_rel = max(max_rel, 1.0)
+        prev_debits = new_debits
+
+        if len(tears) == 0 or max_rel < tol:
+            converged = True
+            break
+
+    return {"node_outputs": res["node_outputs"], "finals": res["finals"],
+            "n_iter": n_iter, "converged": converged,
+            "tear_debits": prev_debits, "n_tears": len(tears)}
