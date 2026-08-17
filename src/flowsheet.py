@@ -343,25 +343,31 @@ def solve_iterative(flowsheet, feed, prop_lookup=None, assay_func=None,
     car un circuit ferme est circulaire : ainsi on coupe les flux de retour, on les suppose
     vides, puis on recalcule en injectant a chaque tour le tear estime au tour precedent,
     jusqu'a stabilisation du debit (charge circulante convergee).
-    tol : variation relative de debit du tear en dessous de laquelle on considere converge.
-    Retour : dict avec node_outputs, finals, n_iter, converged, et le debit du/des tears.
+
+    Gestion robuste, car un circuit mal regle peut ne pas converger : ainsi on detecte la
+    divergence (charge circulante croissant sans fin), un plafond absolu (10x l'alimentation),
+    et le depassement du nombre d'iterations. Dans tous ces cas on renvoie le DERNIER etat
+    calcule avec un statut explicite, plutot qu'un echec muet.
+
+    Statuts possibles : 'converged', 'max_iter_reached', 'diverged', 'circulating_load_too_high'.
     """
     tears = find_tear_edges(flowsheet)
-
-    # Flowsheet "coupe" : on retire les connexions tears pour le calcul en une passe.
     cut_conns = [c for c in flowsheet["connections"] if c not in tears]
     cut_fs = {"nodes": flowsheet["nodes"], "connections": cut_conns}
 
-    # Etat initial : chaque tear apporte un flux vide (None) a son noeud destinataire.
     tear_streams = {i: None for i in range(len(tears))}
-
     prev_debits = [0.0] * len(tears)
-    converged = False
+    history = []                     # debit total du/des tears a chaque iteration
+    feed_mass = feed.solids_tph
+    load_ceiling = 10.0 * feed_mass  # plafond absolu de charge circulante
+    rising_count = 0                 # nb d'iterations consecutives de croissance monotone
+
+    status = "max_iter_reached"
     n_iter = 0
+    res = None
 
     for it in range(max_iter):
         n_iter = it + 1
-        # Construction des injections : pour chaque tear, son flux estime va vers sa destination.
         incoming_override = {}
         for i, tear in enumerate(tears):
             stream = tear_streams[i]
@@ -369,12 +375,10 @@ def solve_iterative(flowsheet, feed, prop_lookup=None, assay_func=None,
                 dst = tear["to"]
                 incoming_override.setdefault(dst, []).append(stream)
 
-        # Calcul en une passe avec les tears injectes.
         res = solve_once(cut_fs, feed, prop_lookup=prop_lookup, assay_func=assay_func,
                          grid=grid, apply_p80_func=apply_p80_func,
                          incoming_override=incoming_override)
 
-        # Mise a jour des tears : on relit le flux reel produit a la source de chaque tear.
         new_debits = []
         for i, tear in enumerate(tears):
             src_node, src_out = tear["from"]
@@ -383,22 +387,45 @@ def solve_iterative(flowsheet, feed, prop_lookup=None, assay_func=None,
             tear_streams[i] = stream
             new_debits.append(stream.solids_tph if stream is not None else 0.0)
 
-        # Convergence : variation relative du debit de chaque tear sous le seuil.
+        total_tear = sum(new_debits)
+        history.append(round(total_tear, 2))
+
+        # Plafond absolu : charge circulante ingerable -> on arrete.
+        if total_tear > load_ceiling:
+            status = "circulating_load_too_high"
+            break
+
+        # Convergence : variation relative de chaque tear sous le seuil.
         max_rel = 0.0
         for i in range(len(tears)):
-            d_new = new_debits[i]
-            d_old = prev_debits[i]
+            d_new, d_old = new_debits[i], prev_debits[i]
             if d_new > 1e-9:
-                rel = abs(d_new - d_old) / d_new
-                max_rel = max(max_rel, rel)
+                max_rel = max(max_rel, abs(d_new - d_old) / d_new)
             elif d_old > 1e-9:
                 max_rel = max(max_rel, 1.0)
+
+        # Detection de divergence, car une hausse n'est PAS une divergence si elle ralentit
+        # (convergence lente) : ainsi on regarde l'ecart entre iterations. Si l'ecart
+        # AUGMENTE sur plusieurs tours (au lieu de diminuer), la charge circulante s'emballe.
+        if len(history) >= 3:
+            ecart_actuel = abs(history[-1] - history[-2])
+            ecart_precedent = abs(history[-2] - history[-3])
+            if ecart_actuel > ecart_precedent * 1.001:   # l'ecart grandit -> emballement
+                rising_count += 1
+            else:                                          # l'ecart retrecit -> ca converge
+                rising_count = 0
+        if rising_count >= 5:
+            status = "diverged"
+            break
+
         prev_debits = new_debits
 
         if len(tears) == 0 or max_rel < tol:
-            converged = True
+            status = "converged"
             break
 
+    converged = (status == "converged")
     return {"node_outputs": res["node_outputs"], "finals": res["finals"],
-            "n_iter": n_iter, "converged": converged,
-            "tear_debits": prev_debits, "n_tears": len(tears)}
+            "n_iter": n_iter, "converged": converged, "status": status,
+            "tear_debits": prev_debits if converged else [round(d, 2) for d in new_debits],
+            "n_tears": len(tears), "history": history}
