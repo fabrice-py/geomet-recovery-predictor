@@ -138,6 +138,18 @@ TRANSLATIONS = {
                     "en": "Excessive circulating load (>10x feed). Unmanageable circuit, review settings."},
     "cc_max_iter": {"fr": "Convergence non atteinte apres {n} iterations. Resultat approximatif.",
                     "en": "Convergence not reached after {n} iterations. Approximate result."},
+
+"returns_section": {"fr": "Retours (charge circulante)", "en": "Recycles (circulating load)"},
+    "returns_caption": {"fr": "Renvoyez une sortie d'etage vers un etage anterieur pour creer une boucle (ex. sousverse -> broyeur).",
+                        "en": "Send a stage output back to an earlier stage to form a loop (e.g. underflow -> mill)."},
+    "n_returns": {"fr": "Nombre de retours", "en": "Number of recycles"},
+    "return_n": {"fr": "Retour", "en": "Recycle"},
+    "return_from_stage": {"fr": "Etage source", "en": "From stage"},
+    "return_output": {"fr": "Sortie", "en": "Output"},
+    "return_to_stage": {"fr": "Retourne vers", "en": "Returns to"},
+    "returns_need_two": {"fr": "Ajoutez au moins 2 etages pour definir un retour.",
+                        "en": "Add at least 2 stages to define a recycle."},
+
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {

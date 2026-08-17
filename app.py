@@ -361,6 +361,7 @@ if is_multi:
                "(gravite, magnetique, flottation). Le rejet d'un etage alimente le suivant.")
     n_stages = st.number_input(t("n_stages", lang), min_value=1, max_value=6, value=2, step=1)
     voies_multi = ["shaking_table", "spiral", "falcon", "magnetic", "flotation", "ball_mill", "hydrocyclone"]
+
     for i in range(int(n_stages)):
         with st.expander(f"{t('stage_n', lang)} {i+1}", expanded=(i == 0)):
             name = st.text_input(t("stage_name", lang), value=f"etage_{i+1}",
@@ -390,6 +391,36 @@ if is_multi:
                         label, float(rule["min"]), float(rule["max"]),
                         float(rule["default"]), key=f"ms_{i}_{param}")
             multi_stages.append({"name": name, "unit_type": unit_type_i, "settings": settings_i, "metal": metal_i})
+# ---- Retours (charge circulante) ----
+    st.subheader(t("returns_section", lang))
+    st.caption(t("returns_caption", lang))
+    from flowsheet import outputs_of
+    stage_names_multi = [s["name"] for s in multi_stages]
+    multi_returns = []
+    if len(multi_stages) >= 2:
+        n_returns = st.number_input(t("n_returns", lang), min_value=0, max_value=3,
+                                    value=0, step=1)
+        for r in range(int(n_returns)):
+            st.markdown(f"**{t('return_n', lang)} {r+1}**")
+            rc1, rc2, rc3 = st.columns(3)
+            # Etage source
+            src_stage = rc1.selectbox(t("return_from_stage", lang), options=stage_names_multi,
+                                      key=f"ret_src_{r}")
+            # Sortie de l'etage source (depend de son type)
+            src_unit_type = next(s["unit_type"] for s in multi_stages if s["name"] == src_stage)
+            src_outs = outputs_of(src_unit_type)
+            src_out = rc2.selectbox(t("return_output", lang),
+                                    options=[option_label(o, lang) if o in ("overflow", "underflow") else o for o in src_outs],
+                                    key=f"ret_out_{r}")
+            # Retrouver la cle technique de la sortie choisie
+            src_out_key = src_outs[[option_label(o, lang) if o in ("overflow", "underflow") else o for o in src_outs].index(src_out)]
+            # Etage destination
+            dst_stage = rc3.selectbox(t("return_to_stage", lang), options=stage_names_multi,
+                                      key=f"ret_dst_{r}")
+            multi_returns.append({"from_stage": src_stage, "from_output": src_out_key,
+                                  "to_stage": dst_stage})
+    else:
+        st.info(t("returns_need_two", lang))
 
 def plot_partition_curve(grid, d50, sharpness, lang):
     """Trace la courbe de partage (Tromp) d'un hydrocyclone, car c'est sa signature : ainsi
@@ -485,6 +516,7 @@ if lancer:
     st.session_state["has_result"] = True
     if is_multi:
         st.session_state["multi_stages"] = multi_stages
+        st.session_state["multi_returns"] = multi_returns
     elif is_circuit:
         st.session_state["stage_configs"] = editor_to_stage_configs(circuit_editor)
     else:
