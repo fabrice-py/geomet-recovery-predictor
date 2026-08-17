@@ -213,14 +213,16 @@ element = st.sidebar.selectbox(
 # ============================ SIDEBAR : TRAITEMENT ============================
 st.sidebar.header(t("process_header", lang))
 traitement = st.sidebar.radio(t("process_type", lang),
-                              [t("process_simple", lang), t("process_circuit", lang)])
+                              [t("process_simple", lang), t("process_circuit", lang),
+                               t("process_multi", lang)])
 is_circuit = (traitement == t("process_circuit", lang))
+is_multi = (traitement == t("process_multi", lang))
 
 unit_type = None
 settings = {}
 template_name = None
 
-if not is_circuit:
+if not is_circuit and not is_multi:
     st.sidebar.subheader(t("sep_route", lang))
     voies = ["shaking_table", "spiral", "falcon", "magnetic", "flotation"]
     display_voies = [route_label(v, lang) for v in voies]
@@ -298,7 +300,38 @@ if is_circuit:
     circuit_editor = st.data_editor(
         CIRCUIT_TEMPLATES[template_name], num_rows="dynamic",
         use_container_width=True, key="circuit_editor")
-
+# ---- Composition d'un circuit multi-voies (etages heterogenes) ----
+multi_stages = []
+if is_multi:
+    st.header(t("process_multi", lang))
+    st.caption("Composez un circuit ou chaque etage peut etre d'une voie differente "
+               "(gravite, magnetique, flottation). Le rejet d'un etage alimente le suivant.")
+    n_stages = st.number_input(t("n_stages", lang), min_value=1, max_value=6, value=2, step=1)
+    voies_multi = ["shaking_table", "spiral", "falcon", "magnetic", "flotation"]
+    for i in range(int(n_stages)):
+        with st.expander(f"{t('stage_n', lang)} {i+1}", expanded=(i == 0)):
+            name = st.text_input(t("stage_name", lang), value=f"etage_{i+1}",
+                                 key=f"ms_name_{i}")
+            voie_disp = [route_label(v, lang) for v in voies_multi]
+            picked = st.selectbox(t("stage_route", lang), options=voie_disp, key=f"ms_route_{i}")
+            unit_type_i = voies_multi[voie_disp.index(picked)]
+            # Reglages de la voie choisie, generes depuis SEPARATION_SPECS.
+            settings_i = {}
+            for param, rule in SEPARATION_SPECS[unit_type_i].items():
+                if param.startswith("_"):
+                    continue
+                label = param_label(param, lang)
+                if "choices" in rule:
+                    choices = rule["choices"]
+                    disp = [option_label(c, lang) for c in choices]
+                    idx = choices.index(rule["default"])
+                    pick = st.selectbox(label, options=disp, index=idx, key=f"ms_{i}_{param}")
+                    settings_i[param] = choices[disp.index(pick)]
+                elif "min" in rule:
+                    settings_i[param] = st.slider(
+                        label, float(rule["min"]), float(rule["max"]),
+                        float(rule["default"]), key=f"ms_{i}_{param}")
+            multi_stages.append({"name": name, "unit_type": unit_type_i, "settings": settings_i})
 
 def build_feed():
     prop_lookup = None
@@ -366,15 +399,15 @@ if lancer:
     st.session_state["assay_func"] = assay_func
     st.session_state["element"] = element
     st.session_state["is_circuit"] = is_circuit
+    st.session_state["is_multi"] = is_multi
     st.session_state["has_result"] = True
-    if not is_circuit:
+    if is_multi:
+        st.session_state["multi_stages"] = multi_stages
+    elif is_circuit:
+        st.session_state["stage_configs"] = editor_to_stage_configs(circuit_editor)
+    else:
         st.session_state["unit_type"] = unit_type
         st.session_state["settings"] = dict(settings)
-        st.session_state["cut_mode"] = cut_mode
-        st.session_state["direct_d50"] = direct_d50
-        st.session_state["direct_ep"] = direct_ep
-    else:
-        st.session_state["stage_configs"] = editor_to_stage_configs(circuit_editor)
 
 
 # ============================ AFFICHAGE DES RESULTATS ============================
@@ -384,13 +417,27 @@ if st.session_state.get("has_result"):
     assay_func = st.session_state["assay_func"]
     element = st.session_state["element"]
     res_is_circuit = st.session_state["is_circuit"]
-
+    res_is_multi = st.session_state.get("is_multi", False)
     st.header(t("results", lang))
     st.subheader(t("feed_mineralogy", lang))
     st.dataframe([{t("mineral", lang): m, "%": round(v, 2)} for m, v in feed.modal.items()],
                  use_container_width=True)
 
-    if not res_is_circuit:
+    if res_is_multi:
+        # Circuit multi-voies : execution via run_series sur des SeparationUnit heterogenes.
+        from circuit import run_series
+        stages = st.session_state["multi_stages"]
+        stage_units = [(s["name"], SeparationUnit(s["unit_type"], s["settings"])) for s in stages]
+        result = run_series(feed, stage_units, prop_lookup=prop_lookup, assay_func=assay_func)
+        concentrates = result["concentrates"]
+        tail = result["final_tail"]
+        st.subheader(t("performance", lang, el=element))
+        streams_named = [(f"{t('concentrate', lang)} {name}", c) for name, c in concentrates.items()]
+        streams_named.append((t("final_tail", lang), tail))
+        perf_table(feed, streams_named, element)
+        total_out = sum(c.solids_tph for c in concentrates.values()) + tail.solids_tph
+        st.caption(f"Conservation masse : {total_out:.1f} t/h (alim {feed.solids_tph:.0f} t/h)")
+    elif not res_is_circuit:
         unit_type = st.session_state["unit_type"]
         settings = st.session_state["settings"]
         unit = SeparationUnit(unit_type, settings)
@@ -494,3 +541,4 @@ if st.session_state.get("has_result"):
 else:
     if not use_custom_minerals and not is_circuit:
         st.info(t("info_configure", lang))
+res_is_multi = st.session_state.get("is_multi", False)

@@ -52,7 +52,11 @@ TRANSLATIONS = {
     "metal_header": {"fr": "2. Metal d'interet", "en": "2. Metal of interest"},
     "metal_followed": {"fr": "Metal suivi (recuperations et courbe)",
                        "en": "Tracked metal (recoveries and curve)"},
-
+"process_multi": {"fr": "Circuit multi-voies", "en": "Multi-route circuit"},
+    "n_stages": {"fr": "Nombre d'etages", "en": "Number of stages"},
+    "stage_n": {"fr": "Etage", "en": "Stage"},
+    "stage_name": {"fr": "Nom de l'etage", "en": "Stage name"},
+    "stage_route": {"fr": "Voie de separation", "en": "Separation route"},
     # ----- Sidebar : traitement -----
     "process_header": {"fr": "3. Traitement", "en": "3. Process"},
     "process_type": {"fr": "Type", "en": "Type"},
@@ -178,6 +182,7 @@ TRANSLATIONS = {
     "cut_mode_direct": {"fr": "Coupure directe (d50/Ep)", "en": "Direct cut (d50/Ep)"},
     "d50_label": {"fr": "d50 - densite de coupure", "en": "d50 - cut density"},
     "ep_label": {"fr": "Ep - nettete de coupure", "en": "Ep - cut sharpness"},
+    
 }
 # ============================================================================
 # Libelles des parametres machine, car les cles techniques
