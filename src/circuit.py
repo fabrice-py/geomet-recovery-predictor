@@ -50,15 +50,19 @@ def run_series(feed, stages, prop_lookup=None, assay_func=None):
     Retour : dict avec les concentrés par étage, le rejet final, et le flux d'alimentation.
     """
     concentrates = {}
+    stage_feeds = {}            # flux d'alimentation de chaque etage, car la courbe locale
+                                # d'un etage se trace sur ce qu'il RECOIT (rejet du precedent).
     current = feed
     for stage_name, unit in stages:
+        stage_feeds[stage_name] = current
         conc, tail = apply_unit(current, unit,
                                 conc_name=f"conc_{stage_name}",
                                 tail_name=f"rejet_{stage_name}",
                                 prop_lookup=prop_lookup, assay_func=assay_func)
         concentrates[stage_name] = conc
         current = tail          # le rejet devient l'alimentation de l'étage suivant
-    return {"feed": feed, "concentrates": concentrates, "final_tail": current}
+    return {"feed": feed, "concentrates": concentrates, "final_tail": current,
+            "stage_feeds": stage_feeds}
 
 
 def mass_check(result):

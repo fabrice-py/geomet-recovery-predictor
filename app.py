@@ -315,6 +315,11 @@ if is_multi:
             voie_disp = [route_label(v, lang) for v in voies_multi]
             picked = st.selectbox(t("stage_route", lang), options=voie_disp, key=f"ms_route_{i}")
             unit_type_i = voies_multi[voie_disp.index(picked)]
+            # Metal d'interet propre a cet etage, car chaque etage vise souvent un metal
+            # different (Cu dans l'etage Cu, Fe dans l'etage magnetique...) : ainsi le suivi
+            # se fait par etage.
+            metals = ["Fe", "Cu", "Zn", "Pb", "SiO2", "Au", "Ag", "Sn", "Ni", "Co", "As", "S"]
+            metal_i = st.selectbox(t("metal_followed", lang), options=metals, key=f"ms_metal_{i}")
             # Reglages de la voie choisie, generes depuis SEPARATION_SPECS.
             settings_i = {}
             for param, rule in SEPARATION_SPECS[unit_type_i].items():
@@ -331,7 +336,7 @@ if is_multi:
                     settings_i[param] = st.slider(
                         label, float(rule["min"]), float(rule["max"]),
                         float(rule["default"]), key=f"ms_{i}_{param}")
-            multi_stages.append({"name": name, "unit_type": unit_type_i, "settings": settings_i})
+            multi_stages.append({"name": name, "unit_type": unit_type_i, "settings": settings_i, "metal": metal_i})
 
 def build_feed():
     prop_lookup = None
@@ -431,10 +436,46 @@ if st.session_state.get("has_result"):
         result = run_series(feed, stage_units, prop_lookup=prop_lookup, assay_func=assay_func)
         concentrates = result["concentrates"]
         tail = result["final_tail"]
-        st.subheader(t("performance", lang, el=element))
-        streams_named = [(f"{t('concentrate', lang)} {name}", c) for name, c in concentrates.items()]
-        streams_named.append((t("final_tail", lang), tail))
-        perf_table(feed, streams_named, element)
+        stage_feeds = result["stage_feeds"]
+
+        # Un bloc de resultats par etage, car chaque etage a sa voie et son metal suivi :
+        # ainsi on lit la performance de chaque etage sur SON metal d'interet.
+        for s in stages:
+            name = s["name"]
+            metal_i = s.get("metal", element)
+            conc = concentrates.get(name)
+            if conc is None:
+                continue
+            st.markdown(f"### {t('stage_n', lang)} : {name} "
+                        f"({route_label(s['unit_type'], lang)})")
+            perf_table(feed, [(f"{t('concentrate', lang)} {name}", conc)], metal_i)
+# Courbe locale de l'etage, car on veut le compromis teneur-recuperation de CET
+            # etage sur le flux qu'il recoit : ainsi on balaye un parametre de l'etage sur
+            # son alimentation reelle (rejet de l'etage precedent).
+            stage_feed = stage_feeds.get(name, feed)
+            params_i = SWEEP_PARAMS.get(s["unit_type"], [])
+            if params_i:
+                disp_i = [param_label(p, lang) for p in params_i]
+                pick_i = st.selectbox(t("sweep_param", lang), options=disp_i,
+                                      key=f"msweep_{name}")
+                csweep_i = params_i[disp_i.index(pick_i)]
+                rule_i = SEPARATION_SPECS[s["unit_type"]].get(csweep_i, {})
+                vmin_i = float(rule_i.get("min", 0.0))
+                vmax_i = float(rule_i.get("max", 1.0))
+                cc1, cc2 = st.columns(2)
+                lo_i = cc1.number_input(t("min_val", lang), value=vmin_i, key=f"mlo_{name}_{csweep_i}")
+                hi_i = cc2.number_input(t("max_val", lang), value=vmax_i, key=f"mhi_{name}_{csweep_i}")
+                if st.button(t("trace_curve", lang), key=f"mtrace_{name}"):
+                    pts_i = grade_recovery_simple(
+                        stage_feed, s["unit_type"], s["settings"], csweep_i,
+                        np.linspace(lo_i, hi_i, 12), metal_i,
+                        prop_lookup=prop_lookup, assay_func=assay_func)
+                    plot_grade_recovery(pts_i, metal_i, csweep_i,
+                                        t("gr_title_simple", lang, el=metal_i, p=param_label(csweep_i, lang)),
+                                        sweep_label=param_label(csweep_i, lang))
+            st.markdown("---")
+        st.markdown(f"### {t('final_tail', lang)}")
+        perf_table(feed, [(t("final_tail", lang), tail)], element)
         total_out = sum(c.solids_tph for c in concentrates.values()) + tail.solids_tph
         st.caption(f"Conservation masse : {total_out:.1f} t/h (alim {feed.solids_tph:.0f} t/h)")
     elif not res_is_circuit:
