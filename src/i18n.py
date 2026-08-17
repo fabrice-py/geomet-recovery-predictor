@@ -116,7 +116,19 @@ TRANSLATIONS = {
     "final_tail": {"fr": "Rejet final", "en": "Final tailings"},
     "define_stage_err": {"fr": "Definissez au moins un etage (avec un nom).",
                          "en": "Define at least one stage (with a name)."},
-
+"mill_result": {
+        "fr": "Broyage : P80 {p_in} um -> {p_out} um (energie {e} kWh/t, indice Wi {wi}). "
+              "Masse et mineralogie inchangees ; liberation amelioree.",
+        "en": "Grinding: P80 {p_in} um -> {p_out} um (energy {e} kWh/t, work index {wi}). "
+              "Mass and mineralogy unchanged; liberation improved."},
+    "cyclone_result": {
+        "fr": "Classification : surverse {m_over} t/h (P80 {p_over} um), sousverse {m_under} t/h "
+              "(P80 {p_under} um). Flux continue : {cont}.",
+        "en": "Classification: overflow {m_over} t/h (P80 {p_over} um), underflow {m_under} t/h "
+              "(P80 {p_under} um). Continuing flow: {cont}."},
+              "partition_title": {"fr": "Courbe de partage (Tromp)", "en": "Partition curve (Tromp)"},
+    "partition_size_axis": {"fr": "Taille des particules (um)", "en": "Particle size (um)"},
+    "partition_yaxis": {"fr": "Probabilite vers la sousverse (%)", "en": "Probability to underflow (%)"},
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {
@@ -226,6 +238,11 @@ PARAM_LABELS = {
     "rotor_speed_rpm": {"fr": "Vitesse du rotor (rpm)", "en": "Rotor speed (rpm)"},
     "depressed_minerals": {"fr": "Mineraux deprimes", "en": "Depressed minerals"},
     "activated_minerals": {"fr": "Mineraux actives", "en": "Activated minerals"},
+    "work_index": {"fr": "Indice de travail Wi (kWh/t)", "en": "Work index Wi (kWh/t)"},
+    "energy_kwht": {"fr": "Energie specifique (kWh/t)", "en": "Specific energy (kWh/t)"},
+    "diameter_cm": {"fr": "Diametre du cyclone (cm)", "en": "Cyclone diameter (cm)"},
+    "pressure_kpa": {"fr": "Pression d'alimentation (kPa)", "en": "Feed pressure (kPa)"},
+    "continue_flux": {"fr": "Flux qui continue", "en": "Continuing flow"},
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).
@@ -238,14 +255,18 @@ OPTION_LABELS = {
     "LIMS_dry": {"fr": "Basse intensite, voie seche", "en": "Low intensity, dry"},
     "WHIMS_wet": {"fr": "Haute intensite, voie humide", "en": "High intensity, wet"},
     "WHIMS_dry": {"fr": "Haute intensite, voie seche", "en": "High intensity, dry"},
+    "overflow": {"fr": "Surverse (fins)", "en": "Overflow (fines)"},
+    "underflow": {"fr": "Sousverse (grossiers)", "en": "Underflow (coarse)"},
 }
 
 ROUTE_LABELS = {
     "shaking_table": {"fr": "Table à secousses", "en": "Shaking table"},
     "spiral": {"fr": "Spirale", "en": "Spiral"},
     "falcon": {"fr": "Concentrateur Falcon", "en": "Falcon concentrator"},
-    "magnetic": {"fr": "Separation magnetique", "en": "Magnetic separation"},
+    "magnetic": {"fr": "Séparation magnétique", "en": "Magnetic separation"},
     "flotation": {"fr": "Flottation", "en": "Flotation"},
+    'ball_mill': {'fr': 'Broyeur à boulets', 'en': 'Ball mill'},
+    'hydrocyclone': {'fr': 'Hydrocyclone', 'en': 'Hydrocyclone'},
 }
 
 

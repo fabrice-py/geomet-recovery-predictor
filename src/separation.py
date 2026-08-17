@@ -55,6 +55,11 @@ SEPARATION_SPECS = {
         "depressed_minerals": {"default": []},
         "activated_minerals": {"default": []},
     },
+    "hydrocyclone": {
+        "diameter_cm": {"min": 5.0, "max": 50.0, "default": 15.0},
+        "pressure_kpa": {"min": 20.0, "max": 300.0, "default": 100.0},
+        "continue_flux": {"choices": ["overflow", "underflow"], "default": "overflow"},
+    },
 }
 
 @dataclass
@@ -96,7 +101,6 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
     Partage d'un flux en concentre + rejet a partir d'une recuperation par mineral, car
     c'est l'operation commune a toutes les voies : ainsi chaque mineral voit sa masse
     repartie selon son taux, puis on reconstruit entierement les deux flux de sortie.
-
     gold_recovery : soit un float (fraction de l'or TOTAL au concentre), soit un dict par
     MODE {"sulfide":.., "native":.., "gangue":..}, car chaque mode d'or a sa propre
     recuperation (l'or des sulfures suit ses hotes, l'or natif a sa flottabilite, etc.) :

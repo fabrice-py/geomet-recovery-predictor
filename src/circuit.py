@@ -12,7 +12,8 @@ from separation import separate
 from laws_gravity import gravity_recovery, gravity_cutpoint, gold_gravity_recovery
 from laws_magnetic import magnetic_recovery, magnetic_cutpoint
 from laws_flotation import flotation_recovery, gold_flotation_recovery
-
+from comminution import grind_stream
+from classification import classify_stream
 
 def apply_unit(stream, unit, conc_name="concentre", tail_name="rejet",  prop_lookup=None, assay_func=None):
     """
@@ -41,28 +42,59 @@ def apply_unit(stream, unit, conc_name="concentre", tail_name="rejet",  prop_loo
         raise ValueError(f"Type d'unité inconnu : {unit.unit_type}")
 
 
-def run_series(feed, stages, prop_lookup=None, assay_func=None):
+def run_series(feed, stages, prop_lookup=None, assay_func=None,
+               grid=None, apply_p80_func=None):
     """
-    Application d'une cascade d'unités en série, car le rejet de chaque étage alimente le
-    suivant : ainsi on collecte un concentré par étage et un unique rejet final.
-
+    Application d'une cascade d'unites en serie, car le rejet de chaque etage alimente le
+    suivant : ainsi on collecte un concentre par etage et un unique rejet final.
     stages : liste de tuples (nom_etage, SeparationUnit).
-    Retour : dict avec les concentrés par étage, le rejet final, et le flux d'alimentation.
+    Un etage de type 'ball_mill' TRANSFORME le flux (broyage) au lieu de le separer : il ne
+    produit pas de concentre, il affine le flux qui continue vers l'etage suivant.
+    grid, apply_p80_func : requis pour le broyage (reconstruction PSD + liberation).
+    Retour : dict avec les concentres par etage, le rejet final, les flux d'entree, et la
+    liste des etages de broyage (pour l'affichage).
     """
     concentrates = {}
-    stage_feeds = {}            # flux d'alimentation de chaque etage, car la courbe locale
-                                # d'un etage se trace sur ce qu'il RECOIT (rejet du precedent).
+    stage_feeds = {}
+    mill_outputs = {}           # flux de sortie des broyeurs, car ils ne font pas de concentre
+    cyclone_outputs = {}
     current = feed
     for stage_name, unit in stages:
         stage_feeds[stage_name] = current
-        conc, tail = apply_unit(current, unit,
-                                conc_name=f"conc_{stage_name}",
-                                tail_name=f"rejet_{stage_name}",
-                                prop_lookup=prop_lookup, assay_func=assay_func)
-        concentrates[stage_name] = conc
-        current = tail          # le rejet devient l'alimentation de l'étage suivant
+        if unit.unit_type == "ball_mill":
+            s = unit.settings
+            import copy
+            ground = copy.deepcopy(current)
+            grind_stream(ground, work_index=s.get("work_index", 15.0),
+                         energy_kwht=s.get("energy_kwht", 10.0),
+                         grid=grid, apply_p80_func=apply_p80_func)
+            mill_outputs[stage_name] = ground
+            current = ground
+        elif unit.unit_type == "hydrocyclone":
+            # Classification par taille : deux flux (overflow fin, underflow grossier).
+            # L'utilisateur choisit lequel CONTINUE ; l'autre est un produit de sortie.
+            s = unit.settings
+            over, under = classify_stream(
+                current, diameter_cm=s.get("diameter_cm", 15.0),
+                pressure_kpa=s.get("pressure_kpa", 100.0), grid=grid,
+                apply_p80_func=apply_p80_func)
+            cyclone_outputs[stage_name] = {"overflow": over, "underflow": under}
+            if s.get("continue_flux", "overflow") == "underflow":
+                current = under
+                concentrates[f"{stage_name}_overflow"] = over   # produit de sortie
+            else:
+                current = over
+                concentrates[f"{stage_name}_underflow"] = under  # produit de sortie
+        else:
+            conc, tail = apply_unit(current, unit,
+                                    conc_name=f"conc_{stage_name}",
+                                    tail_name=f"rejet_{stage_name}",
+                                    prop_lookup=prop_lookup, assay_func=assay_func)
+            concentrates[stage_name] = conc
+            current = tail         # le rejet devient l'alimentation de l'étage suivant
     return {"feed": feed, "concentrates": concentrates, "final_tail": current,
-            "stage_feeds": stage_feeds}
+            "stage_feeds": stage_feeds, "mill_outputs": mill_outputs,
+            "cyclone_outputs": cyclone_outputs}
 
 
 def mass_check(result):

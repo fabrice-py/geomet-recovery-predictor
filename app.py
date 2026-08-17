@@ -360,7 +360,7 @@ if is_multi:
     st.caption("Composez un circuit ou chaque etage peut etre d'une voie differente "
                "(gravite, magnetique, flottation). Le rejet d'un etage alimente le suivant.")
     n_stages = st.number_input(t("n_stages", lang), min_value=1, max_value=6, value=2, step=1)
-    voies_multi = ["shaking_table", "spiral", "falcon", "magnetic", "flotation"]
+    voies_multi = ["shaking_table", "spiral", "falcon", "magnetic", "flotation", "ball_mill", "hydrocyclone"]
     for i in range(int(n_stages)):
         with st.expander(f"{t('stage_n', lang)} {i+1}", expanded=(i == 0)):
             name = st.text_input(t("stage_name", lang), value=f"etage_{i+1}",
@@ -390,6 +390,30 @@ if is_multi:
                         label, float(rule["min"]), float(rule["max"]),
                         float(rule["default"]), key=f"ms_{i}_{param}")
             multi_stages.append({"name": name, "unit_type": unit_type_i, "settings": settings_i, "metal": metal_i})
+
+def plot_partition_curve(grid, d50, sharpness, lang):
+    """Trace la courbe de partage (Tromp) d'un hydrocyclone, car c'est sa signature : ainsi
+    on montre, pour chaque taille, la probabilite d'aller a la sousverse (grossiers), avec
+    le d50 (taille de coupure a 50%) marque."""
+    from size_classes import class_representative_sizes
+    from classification import cyclone_partition
+    sizes = class_representative_sizes(grid)
+    # Courbe lisse sur une plage de tailles (pas seulement les classes).
+    xs = np.logspace(np.log10(min(sizes) * 0.5), np.log10(max(sizes) * 1.5), 100)
+    ys = [cyclone_partition(x, d50, sharpness) * 100.0 for x in xs]
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    ax.plot(xs, ys, "-", color="#c0392b", linewidth=2)
+    ax.axhline(50, color="gray", linestyle="--", linewidth=1)
+    ax.axvline(d50, color="gray", linestyle="--", linewidth=1)
+    ax.annotate(f"d50 = {d50:.0f} um", (d50, 50), fontsize=8,
+                textcoords="offset points", xytext=(6, 6))
+    ax.set_xscale("log")
+    ax.set_xlabel(t("partition_size_axis", lang))
+    ax.set_ylabel(t("partition_yaxis", lang))
+    ax.set_title(t("partition_title", lang))
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    st.pyplot(fig, use_container_width=False)
 
 def build_feed():
     prop_lookup = None
@@ -497,16 +521,56 @@ if st.session_state.get("has_result"):
         from circuit import run_series
         stages = st.session_state["multi_stages"]
         stage_units = [(s["name"], SeparationUnit(s["unit_type"], s["settings"])) for s in stages]
-        result = run_series(feed, stage_units, prop_lookup=prop_lookup, assay_func=assay_func)
+        result = run_series(feed, stage_units, prop_lookup=prop_lookup, assay_func=assay_func, grid=st.session_state["grid"], apply_p80_func=apply_p80)
         concentrates = result["concentrates"]
         tail = result["final_tail"]
         stage_feeds = result["stage_feeds"]
 
         # Un bloc de resultats par etage, car chaque etage a sa voie et son metal suivi :
         # ainsi on lit la performance de chaque etage sur SON metal d'interet.
+        mill_outputs = result.get("mill_outputs", {})
         for s in stages:
             name = s["name"]
             metal_i = s.get("metal", element)
+            # Cas broyeur : pas de concentre, mais on montre l'effet du broyage (P80 avant/apres).
+            if s["unit_type"] == "ball_mill":
+                st.markdown(f"### {t('stage_n', lang)} : {name} "
+                            f"({route_label('ball_mill', lang)})")
+                feed_in = stage_feeds.get(name)
+                ground = mill_outputs.get(name)
+                if feed_in is not None and ground is not None:
+                    st.write(t("mill_result", lang,
+                               p_in=round(feed_in.p80_um, 1),
+                               p_out=round(ground.p80_um, 1),
+                               e=s["settings"].get("energy_kwht", 0),
+                               wi=s["settings"].get("work_index", 0)))
+                    # Granulometrie apres broyage
+                    view_m = st.radio(t("psd_view", lang),
+                                      [t("psd_view_freq", lang), t("psd_view_cum", lang)],
+                                      horizontal=True, key=f"psdview_mill_{name}")
+                    mode_m = "cum" if view_m == t("psd_view_cum", lang) else "freq"
+                    plot_psd(st.session_state["grid"], ground.psd_curve, ground.p80_um, mode_m, lang)
+                st.markdown("---")
+                continue
+            # Cas hydrocyclone : deux flux (overflow fin, underflow grossier).
+            if s["unit_type"] == "hydrocyclone":
+                st.markdown(f"### {t('stage_n', lang)} : {name} "
+                            f"({route_label('hydrocyclone', lang)})")
+                cyc = result.get("cyclone_outputs", {}).get(name)
+                if cyc is not None:
+                    over, under = cyc["overflow"], cyc["underflow"]
+                    st.write(t("cyclone_result", lang,
+                               m_over=round(over.solids_tph, 1), p_over=round(over.p80_um, 1),
+                               m_under=round(under.solids_tph, 1), p_under=round(under.p80_um, 1),
+                               cont=option_label(s["settings"].get("continue_flux", "overflow"), lang)))
+                    # Courbe de partage (Tromp), signature de l'hydrocyclone.
+                    from classification import cyclone_cutpoint
+                    d50_cyc, sharp_cyc = cyclone_cutpoint(
+                        s["settings"].get("diameter_cm", 15.0),
+                        s["settings"].get("pressure_kpa", 100.0))
+                    plot_partition_curve(st.session_state["grid"], d50_cyc, sharp_cyc, lang)
+                st.markdown("---")
+                continue
             conc = concentrates.get(name)
             if conc is None:
                 continue
