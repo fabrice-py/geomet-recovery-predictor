@@ -16,7 +16,7 @@ import pandas as pd
 
 from data_models import Stream, LiberationState
 from mineralogy import ORE_PROFILES, assays_from_modal
-
+from size_classes import DEFAULT_GRID_UM, make_psd_rosin_rammler, p80_from_psd
 
 def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
                   seed=42, feed_tph=100.0, assay_noise_pct=0.0):
@@ -76,13 +76,18 @@ def generate_feed(profile_name="polymetallic_refractory_au", n_samples=500,
                   for m in minerals}
         liberation = LiberationState(degree={m: round(v, 3) for m, v in degree.items()})
 
-        # Construction du flux, car c'est l'objet qui circulera dans tout le circuit.
+        # PSD initiale construite par Rosin-Rammler a partir du P80 tire, car la PSD est
+        # desormais la verite granulometrique : ainsi le P80 stocke est DERIVE de la PSD
+        # (coherence), et le broyeur/cyclone pourront manipuler la distribution.
+        psd_i = make_psd_rosin_rammler(DEFAULT_GRID_UM, float(p80[i]), m=1.0)
+        p80_derived = p80_from_psd(DEFAULT_GRID_UM, psd_i)
         stream = Stream(
             name=f"{profile_name}_feed_{i + 1}",
             solids_tph=feed_tph,
             modal=modal,
             liberation=liberation,
-            p80_um=round(float(p80[i]), 1),
+            p80_um=round(float(p80_derived), 1),
+            psd_curve=psd_i,
             pct_solids_mass=round(float(pct_solids[i]), 1),
             assays=assays,
         )
@@ -162,9 +167,13 @@ def apply_p80(stream, p80):
     mais avec le P80 effectif. Modifie le flux en place.
     """
     p80 = float(np.clip(p80, 10, 300))
-    fineness = 1 - (p80 - 45) / (300 - 45)
+    # La PSD est la verite : on la reconstruit pour le P80 vise (Rosin-Rammler), puis on
+    # redecoule le P80 de la PSD, car changer la finesse revient a changer la distribution.
+    stream.psd_curve = make_psd_rosin_rammler(DEFAULT_GRID_UM, p80, m=1.0)
+    p80_eff = p80_from_psd(DEFAULT_GRID_UM, stream.psd_curve)
+    fineness = 1 - (p80_eff - 45) / (300 - 45)
     fineness = float(np.clip(fineness, 0.0, 1.0))
-    stream.p80_um = round(p80, 1)
+    stream.p80_um = round(p80_eff, 1)
 
     # Liberation par mineral, deterministe (sans bruit), car un reglage utilisateur doit
     # etre reproductible : ainsi la liberation est une fonction lisse du P80.
