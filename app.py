@@ -149,7 +149,7 @@ def plot_grade_recovery(points, element, sweep_param, title, sweep_label=None):
         st.warning(t("flat_warning", lang, el=element, p=sweep_param,
                      ar=amp_reco, ag=amp_grade))
 
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(6, 3.5))
     ax.plot(reco, grade, "o-", color="#C62828", lw=2, markersize=6)
     for r, g, v in zip(reco, grade, vals):
         ax.annotate(f"{v:.1f}", (r, g), fontsize=7, alpha=0.6,
@@ -168,7 +168,41 @@ def plot_grade_recovery(points, element, sweep_param, title, sweep_label=None):
                    t("col_grade", lang): p["teneur_%"], t("col_mass", lang): p["recup_massique_%"]}
                   for p in points], use_container_width=True)
 
-
+def plot_psd(grid, psd, p80, mode, lang):
+    """Trace la PSD, car l'utilisateur doit VOIR la granulometrie : en mode 'freq' un
+    histogramme (masse par classe, ou est la matiere), en mode 'cum' la courbe de passant
+    cumule (representation standard ou l'on lit le P80)."""
+    from size_classes import class_labels, class_representative_sizes
+    labels = class_labels(grid)
+    fig, ax = plt.subplots(figsize=(7, 5))
+    if mode == "cum":
+        # Passant cumule : somme des classes plus fines, en fonction de la taille.
+        # On construit (taille de borne, passant sous cette borne).
+        sizes = list(grid)
+        passing = [sum(psd[i + 1:]) * 100.0 for i in range(len(grid))]
+        # Trie par taille croissante pour une courbe lisible.
+        pairs = sorted(zip(sizes, passing))
+        xs = [p[0] for p in pairs]
+        ys = [p[1] for p in pairs]
+        ax.plot(xs, ys, "o-", color="#c0392b", linewidth=2)
+        ax.axhline(80, color="gray", linestyle="--", linewidth=1)
+        ax.axvline(p80, color="gray", linestyle="--", linewidth=1)
+        ax.set_xscale("log")
+        ax.set_xlabel(t("psd_size_axis", lang))
+        ax.set_ylabel(t("psd_passing_axis", lang))
+        ax.set_title(t("psd_cum_title", lang, p80=p80))
+    else:
+        # Histogramme frequentiel : % de masse par classe.
+        pct = [x * 100.0 for x in psd]
+        ax.bar(range(len(labels)), pct, color="#c0392b")
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+        ax.set_xlabel(t("psd_class_axis", lang))
+        ax.set_ylabel(t("psd_massfrac_axis", lang))
+        ax.set_title(t("psd_freq_title", lang, p80=p80))
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    st.pyplot(fig, use_container_width=False)
 # ============================ SIDEBAR : MINERAI ============================
 st.sidebar.header(t("ore_header", lang))
 feed_tph = st.sidebar.number_input(t("feed_rate", lang),
@@ -427,7 +461,18 @@ if st.session_state.get("has_result"):
     st.subheader(t("feed_mineralogy", lang))
     st.dataframe([{t("mineral", lang): m, "%": round(v, 2)} for m, v in feed.modal.items()],
                  use_container_width=True)
-
+# Granulometrie de l'alimentation, car la PSD est desormais une donnee de premier plan :
+    # ainsi l'utilisateur voit la distribution et le P80 qui en derive.
+    if feed.psd_curve is not None:
+        st.subheader(t("psd_section", lang))
+        from size_classes import DEFAULT_GRID_UM, class_labels
+        grid = DEFAULT_GRID_UM
+        labels = class_labels(grid)
+        view = st.radio(t("psd_view", lang),
+                        [t("psd_view_freq", lang), t("psd_view_cum", lang)],
+                        horizontal=True, key="psd_view_feed")
+        mode = "cum" if view == t("psd_view_cum", lang) else "freq"
+        plot_psd(grid, feed.psd_curve, feed.p80_um, mode, lang)
     if res_is_multi:
         # Circuit multi-voies : execution via run_series sur des SeparationUnit heterogenes.
         from circuit import run_series

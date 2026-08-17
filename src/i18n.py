@@ -47,7 +47,16 @@ TRANSLATIONS = {
         "en": "Define your phases in the main area."},
     "p80": {"fr": "P80 (um)", "en": "P80 (um)"},
     "liberation": {"fr": "Degre de liberation moyen", "en": "Average liberation degree"},
-
+"psd_section": {"fr": "Granulometrie de l'alimentation", "en": "Feed size distribution"},
+    "psd_view": {"fr": "Type de courbe", "en": "Curve type"},
+    "psd_view_freq": {"fr": "Histogramme frequentiel", "en": "Frequency histogram"},
+    "psd_view_cum": {"fr": "Passant cumule", "en": "Cumulative passing"},
+    "psd_size_axis": {"fr": "Taille (um)", "en": "Size (um)"},
+    "psd_passing_axis": {"fr": "Passant cumule (%)", "en": "Cumulative passing (%)"},
+    "psd_class_axis": {"fr": "Classe granulometrique", "en": "Size class"},
+    "psd_massfrac_axis": {"fr": "Fraction massique (%)", "en": "Mass fraction (%)"},
+    "psd_cum_title": {"fr": "Passant cumule (P80 = {p80} um)", "en": "Cumulative passing (P80 = {p80} um)"},
+    "psd_freq_title": {"fr": "Distribution massique (P80 = {p80} um)", "en": "Mass distribution (P80 = {p80} um)"},
     # ----- Sidebar : metal d'interet -----
     "metal_header": {"fr": "2. Metal d'interet", "en": "2. Metal of interest"},
     "metal_followed": {"fr": "Metal suivi (recuperations et courbe)",
