@@ -171,6 +171,20 @@ TRANSLATIONS = {
     "psd_csv_ok": {"fr": "PSD chargee : {n} classes, P80 derive = {p80} um.",
                    "en": "PSD loaded: {n} classes, derived P80 = {p80} um."},
     "psd_csv_parse_err": {"fr": "Erreur de lecture du CSV : {err}", "en": "CSV read error: {err}"},
+
+"drx_import_title": {"fr": "Import DRX (mineralogie mesuree)", "en": "XRD import (measured mineralogy)"},
+    "drx_import_caption": {"fr": "Chargez vos phases et proportions. Vous devrez ensuite completer leurs proprietes ci-dessous.",
+                           "en": "Load your phases and proportions. You must then complete their properties below."},
+    "drx_template": {"fr": "Modele DRX (CSV)", "en": "XRD template (CSV)"},
+    "drx_upload": {"fr": "Charger une DRX (CSV)", "en": "Load XRD (CSV)"},
+    "drx_cols_err": {"fr": "Colonnes introuvables (attendu : Mineral, Proportion %).",
+                     "en": "Columns not found (expected: Mineral, Proportion %)."},
+    "drx_ok": {"fr": "DRX chargee : {n} phases.", "en": "XRD loaded: {n} phases."},
+    "drx_complete_props": {"fr": "OBLIGATOIRE : completez densite, magnetisme et flottabilite de chaque phase dans le tableau ci-dessous.",
+                           "en": "REQUIRED: complete density, magnetism and floatability of each phase in the table below."},
+    "drx_none_known": {"fr": "Aucune phase valide dans le fichier.", "en": "No valid phase in the file."},
+    "drx_parse_err": {"fr": "Erreur de lecture : {err}", "en": "Read error: {err}"},
+
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {

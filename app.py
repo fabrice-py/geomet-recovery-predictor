@@ -221,6 +221,7 @@ use_custom_minerals = False
 
 if mode_minerai == t("mode_profile", lang):
     profile_name = st.sidebar.selectbox(t("profile", lang), options=list(ORE_PROFILES.keys()))
+
 elif mode_minerai == t("mode_base", lang):
     st.sidebar.markdown("**" + t("compose_base", lang) + "**")
     custom_modal = {}
@@ -422,13 +423,64 @@ with st.expander(t("grid_section", lang), expanded=False):
 
 if use_custom_minerals:
     st.header(t("custom_def_header", lang))
+
+    # Import DRX : un CSV (mineral, proportion_%) pre-remplit les phases et leurs teneurs,
+    # car une DRX donne la mineralogie mesuree : ainsi l'utilisateur charge ses phases, puis
+    # COMPLETE OBLIGATOIREMENT les proprietes intrinseques (densite, magnetisme, flottabilite)
+    # que la DRX ne fournit pas, tant que notre base ne couvre pas ces mineraux.
+    st.markdown("**" + t("drx_import_title", lang) + "**")
+    st.caption(t("drx_import_caption", lang))
+    modele_drx = "Mineral;Proportion (%)\nphase_1;40\nphase_2;25\ngangue;35\n"
+    st.download_button(t("drx_template", lang), data=modele_drx,
+                       file_name="modele_drx.csv", mime="text/csv", key="drx_tmpl")
+    drx_csv = st.file_uploader(t("drx_upload", lang), type=["csv"], key="drx_uploader")
+    if drx_csv is not None:
+        try:
+            df_drx = pd.read_csv(drx_csv, sep=None, engine="python")
+            cols = {c.lower().strip(): c for c in df_drx.columns}
+            def find_c(cands):
+                for k in cols:
+                    kn = k.replace(" ", "").replace("(%)", "").replace("_", "")
+                    for cand in cands:
+                        if cand in kn:
+                            return cols[k]
+                return None
+            min_col = find_c(["mineral", "phase", "espece"])
+            pct_col = find_c(["proportion", "pct", "pourcentage", "masse", "percent", "teneur"])
+            if min_col is None or pct_col is None:
+                st.error(t("drx_cols_err", lang))
+            else:
+                rows = []
+                for _, row in df_drx.iterrows():
+                    name = str(row[min_col]).strip()
+                    try:
+                        val = float(row[pct_col])
+                    except (ValueError, TypeError):
+                        continue
+                    if name and name.lower() != "nan":
+                        rows.append({"mineral": name, "proportion_%": val,
+                                     "densite_g_cm3": None, "magnetique": "diamagnetique",
+                                     "flottabilite_0_1": None})
+                if rows:
+                    st.session_state["drx_rows"] = rows
+                    st.success(t("drx_ok", lang, n=len(rows)))
+                    st.warning(t("drx_complete_props", lang))
+                else:
+                    st.error(t("drx_none_known", lang))
+        except Exception as e:
+            st.error(t("drx_parse_err", lang, err=str(e)))
+
     st.markdown("**" + t("table1_props", lang) + "**")
-    default_props = pd.DataFrame([
-        {"mineral": "mon_mineral_1", "proportion_%": 5.0, "densite_g_cm3": 4.2,
-         "magnetique": "paramagnetique_faible", "flottabilite_0_1": 0.9},
-        {"mineral": "gangue", "proportion_%": 95.0, "densite_g_cm3": 2.65,
-         "magnetique": "diamagnetique", "flottabilite_0_1": 0.1},
-    ])
+    # Le tableau part de la DRX chargee si presente, sinon d'un exemple.
+    if st.session_state.get("drx_rows"):
+        default_props = pd.DataFrame(st.session_state["drx_rows"])
+    else:
+        default_props = pd.DataFrame([
+            {"mineral": "mon_mineral_1", "proportion_%": 5.0, "densite_g_cm3": 4.2,
+             "magnetique": "paramagnetique_faible", "flottabilite_0_1": 0.9},
+            {"mineral": "gangue", "proportion_%": 95.0, "densite_g_cm3": 2.65,
+             "magnetique": "diamagnetique", "flottabilite_0_1": 0.1},
+        ])
     custom_props = st.data_editor(
         default_props, num_rows="dynamic", use_container_width=True,
         column_config={
