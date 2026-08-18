@@ -158,6 +158,19 @@ TRANSLATIONS = {
                         "en": "Entered PSD: derived P80 = {p80} um (entered total {tot}%, normalized to 100%)."},
     "psd_manual_empty": {"fr": "Entrez au moins une proportion non nulle.", "en": "Enter at least one non-zero proportion."},
     "psd_manual_invalid": {"fr": "Valeurs invalides : entrez des nombres.", "en": "Invalid values: enter numbers."},
+
+"psd_csv_label": {"fr": "Charger une PSD (CSV)", "en": "Load a PSD (CSV)"},
+    "psd_csv_caption": {"fr": "Une ligne par classe : borne inferieure (um) et % masse. Derniere ligne = fines (borne 0).",
+                        "en": "One row per class: lower bound (um) and % mass. Last row = fines (bound 0)."},
+    "psd_csv_template": {"fr": "Telecharger un modele CSV", "en": "Download a CSV template"},
+    "psd_csv_upload": {"fr": "Fichier CSV de granulometrie", "en": "Size distribution CSV file"},
+    "psd_csv_cols_err": {"fr": "Colonnes introuvables. Attendu : borne_inf_um et pct_masse.",
+                         "en": "Columns not found. Expected: borne_inf_um and pct_masse."},
+    "psd_csv_few_err": {"fr": "Au moins 2 classes sont necessaires.", "en": "At least 2 classes are required."},
+    "psd_csv_empty_err": {"fr": "Les proportions sont toutes nulles.", "en": "All proportions are zero."},
+    "psd_csv_ok": {"fr": "PSD chargee : {n} classes, P80 derive = {p80} um.",
+                   "en": "PSD loaded: {n} classes, derived P80 = {p80} um."},
+    "psd_csv_parse_err": {"fr": "Erreur de lecture du CSV : {err}", "en": "CSV read error: {err}"},
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {

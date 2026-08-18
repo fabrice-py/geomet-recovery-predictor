@@ -325,6 +325,67 @@ with st.expander(t("grid_section", lang), expanded=False):
         st.warning(t("grid_invalid_warning", lang))
         # ---- Mode PSD : generee (Rosin-Rammler depuis le P80) ou manuelle (saisie) ----
     st.markdown("**" + t("psd_mode_label", lang) + "**")
+    # ---- Chargement d'une PSD depuis un CSV (tamisage reel) ----
+    st.markdown("**" + t("psd_csv_label", lang) + "**")
+    st.caption(t("psd_csv_caption", lang))
+    # CSV modele a telecharger, car la convention (borne inf par classe, 0 = fines) doit
+    # etre claire : ainsi l'utilisateur part d'un exemple correct.
+    modele_csv = ("Taille (um);Pourcentage massique (%)\n"
+                  "150;10\n75;30\n38;40\n0;20\n")
+    st.download_button(t("psd_csv_template", lang), data=modele_csv,
+                       file_name="modele_psd.csv", mime="text/csv", key="psd_csv_tmpl")
+    psd_csv = st.file_uploader(t("psd_csv_upload", lang), type=["csv"], key="psd_csv_uploader")
+    if psd_csv is not None:
+        try:
+             # Detection automatique du separateur (virgule, point-virgule, tab), car Excel
+            # varie selon la region : ainsi le fichier se lit quel que soit son separateur.
+            df_csv = pd.read_csv(psd_csv, sep=None, engine="python")
+            cols = {c.lower().strip(): c for c in df_csv.columns}
+            # Tolerance large sur les intitules, car l'utilisateur peut renommer : ainsi on
+            # reconnait taille/classe/borne pour la 1re colonne, et pourcentage/masse pour la 2e.
+            def find_col(candidates):
+                for k in cols:
+                    kn = k.replace(" ", "").replace("(um)", "").replace("(%)", "").replace("_", "")
+                    for cand in candidates:
+                        if cand in kn:
+                            return cols[k]
+                return None
+            borne_col = find_col(["taille", "classe", "borne", "size", "um"])
+            pct_col = find_col(["pourcentage", "masse", "pct", "mass", "percent"])
+            if borne_col is None or pct_col is None:
+                st.error(t("psd_csv_cols_err", lang))
+            else:
+                bornes = pd.to_numeric(df_csv[borne_col], errors="coerce")
+                pcts = pd.to_numeric(df_csv[pct_col], errors="coerce")
+                valid = bornes.notna() & pcts.notna() & (bornes >= 0)
+                bornes = bornes[valid].tolist()
+                pcts = [max(0.0, p) for p in pcts[valid].tolist()]
+                if len(bornes) < 2:
+                    st.error(t("psd_csv_few_err", lang))
+                else:
+                    # Trier par borne decroissante (grossier -> fin), la classe fines (0) en dernier.
+                    pairs = sorted(zip(bornes, pcts), key=lambda x: x[0], reverse=True)
+                    sorted_bornes = [p[0] for p in pairs]
+                    sorted_pcts = [p[1] for p in pairs]
+                    total = sum(sorted_pcts)
+                    if total <= 1e-9:
+                        st.error(t("psd_csv_empty_err", lang))
+                    else:
+                        # La grille = les bornes strictement positives (K lignes -> K-1 bornes).
+                        new_grid = [b for b in sorted_bornes if b > 0]
+                        if len(new_grid) != len(sorted_bornes) - 1:
+                            # Pas exactement une classe fines a 0 : on tolere en prenant les
+                            # bornes > 0 comme grille, la derniere classe etant les fines.
+                            new_grid = sorted_bornes[:-1] if sorted_bornes[-1] <= 1e-9 else sorted_bornes
+                        st.session_state["grid"] = new_grid
+                        st.session_state["psd_manual_values"] = [round(v, 2) for v in sorted_pcts]
+                        st.session_state["psd_manual_curve"] = [round(v / total, 6) for v in sorted_pcts]
+                        st.session_state["psd_manual_active"] = True
+                        from size_classes import p80_from_psd
+                        p80_csv = p80_from_psd(new_grid, st.session_state["psd_manual_curve"])
+                        st.success(t("psd_csv_ok", lang, n=len(new_grid) + 1, p80=p80_csv))
+        except Exception as e:
+            st.error(t("psd_csv_parse_err", lang, err=str(e)))
     psd_mode = st.radio(t("psd_mode_label", lang),
                         [t("psd_mode_auto", lang), t("psd_mode_manual", lang)],
                         horizontal=True, key="psd_mode", label_visibility="collapsed")
