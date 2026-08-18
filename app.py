@@ -420,7 +420,86 @@ with st.expander(t("grid_section", lang), expanded=False):
                 st.warning(t("psd_manual_empty", lang))
         except (ValueError, TypeError):
             st.warning(t("psd_manual_invalid", lang))
+        except (ValueError, TypeError):
+            st.warning(t("psd_manual_invalid", lang))
 
+# ============================ XRF (composition chimique globale mesuree) ============================
+with st.expander(t("xrf_section", lang), expanded=False):
+    st.caption(t("xrf_caption", lang))
+    xrf_choice = st.radio(t("xrf_mode_label", lang),
+                          [t("xrf_none", lang), t("xrf_manual", lang), t("xrf_csv", lang)],
+                          horizontal=True, key="xrf_mode", label_visibility="collapsed")
+
+    if xrf_choice == t("xrf_none", lang):
+        st.session_state["xrf_data"] = None
+
+    elif xrf_choice == t("xrf_manual", lang):
+        prev = st.session_state.get("xrf_manual_df")
+        if prev is None:
+            prev = pd.DataFrame({"element": XRF_ELEMENTS, "teneur_%": [0.0] * len(XRF_ELEMENTS)})
+        xrf_edited = st.data_editor(prev, num_rows="dynamic", use_container_width=True,
+                                    key="xrf_manual_editor")
+        st.session_state["xrf_manual_df"] = xrf_edited
+        xrf_data = {}
+        for _, row in xrf_edited.iterrows():
+            el = str(row["element"]).strip()
+            try:
+                v = float(row["teneur_%"])
+            except (ValueError, TypeError):
+                continue
+            if el and el.lower() != "nan" and v > 0:
+                xrf_data[el] = v
+        st.session_state["xrf_data"] = xrf_data if xrf_data else None
+        if xrf_data:
+            st.caption(t("xrf_loaded_info", lang, n=len(xrf_data), tot=round(sum(xrf_data.values()), 1)))
+
+    elif xrf_choice == t("xrf_csv", lang):
+        st.caption(t("xrf_csv_caption", lang))
+        modele_xrf = "Element;Teneur (%)\nFe;12.5\nCu;3.2\nZn;8.1\nSiO2;45.0\n"
+        st.download_button(t("xrf_template", lang), data=modele_xrf,
+                           file_name="modele_xrf.csv", mime="text/csv", key="xrf_tmpl")
+        xrf_file = st.file_uploader(t("xrf_upload", lang), type=["csv"], key="xrf_uploader")
+        if xrf_file is not None:
+            try:
+                df_xrf = pd.read_csv(xrf_file, sep=None, engine="python")
+                cols = {c.lower().strip(): c for c in df_xrf.columns}
+                def find_cx(cands):
+                    for k in cols:
+                        kn = k.replace(" ", "").replace("(%)", "").replace("_", "")
+                        for cand in cands:
+                            if cand in kn:
+                                return cols[k]
+                    return None
+                el_col = find_cx(["element", "elem", "oxyde", "espece"])
+                ten_col = find_cx(["teneur", "pct", "pourcentage", "masse", "percent", "valeur"])
+                if el_col is None or ten_col is None:
+                    st.error(t("xrf_cols_err", lang))
+                else:
+                    xrf_data = {}
+                    unknown = []
+                    for _, row in df_xrf.iterrows():
+                        el = str(row[el_col]).strip()
+                        try:
+                            v = float(row[ten_col])
+                        except (ValueError, TypeError):
+                            continue
+                        if el and el.lower() != "nan":
+                            xrf_data[el] = v
+                            if el not in XRF_ELEMENTS:
+                                unknown.append(el)
+                    if xrf_data:
+                        st.session_state["xrf_data"] = xrf_data
+                        msg = t("xrf_ok", lang, n=len(xrf_data))
+                        if unknown:
+                            msg += " " + t("xrf_unknown_ok", lang, u=", ".join(unknown))
+                        st.success(msg)
+                    else:
+                        st.error(t("xrf_empty_err", lang))
+            except Exception as e:
+                st.error(t("xrf_parse_err", lang, err=str(e)))
+
+if use_custom_minerals:
+    st.header(t("custom_def_header", lang))
 if use_custom_minerals:
     st.header(t("custom_def_header", lang))
 
@@ -693,6 +772,38 @@ if st.session_state.get("has_result"):
     st.subheader(t("feed_mineralogy", lang))
     st.dataframe([{t("mineral", lang): m, "%": round(v, 2)} for m, v in feed.modal.items()],
                  use_container_width=True)
+    # Comparaison XRF (chimie mesuree) vs chimie reconstruite depuis la mineralogie, car une
+    # XRF chargee permet de VALIDER la mineralogie : ainsi un ecart faible confirme la
+    # coherence, un ecart fort signale une mineralogie ou stoechiometrie a revoir.
+    xrf_data = st.session_state.get("xrf_data")
+    if xrf_data:
+        st.subheader(t("xrf_compare_title", lang))
+        st.caption(t("xrf_compare_caption", lang))
+        rows = []
+        hors_modele = []
+        for el, mesure in xrf_data.items():
+            if el == "Au":
+                # Or : XRF en % converti en g/t (1% = 10000 g/t) pour comparer a Au_gt.
+                reconstruit = feed.assays.get("Au_gt", 0.0)
+                mesure_val = mesure * 10000.0
+                unite = "g/t"
+            elif el in feed.assays:
+                reconstruit = feed.assays.get(el, 0.0)
+                mesure_val = mesure
+                unite = "%"
+            else:
+                hors_modele.append(f"{el} ({mesure})")
+                continue
+            rows.append({
+                t("xrf_element", lang): f"{el} ({unite})",
+                t("xrf_measured", lang): round(mesure_val, 3),
+                t("xrf_reconstructed", lang): round(reconstruit, 3),
+                t("xrf_gap", lang): round(mesure_val - reconstruit, 3),
+            })
+        if rows:
+            st.dataframe(rows, use_container_width=True)
+        if hors_modele:
+            st.caption(t("xrf_out_of_model", lang, u=", ".join(hors_modele)))
 # Granulometrie de l'alimentation, car la PSD est desormais une donnee de premier plan :
     # ainsi l'utilisateur voit la distribution et le P80 qui en derive.
     if feed.psd_curve is not None:
