@@ -1,4 +1,4 @@
-# Simulateur géométallurgique de récupération — Cahier des charges
+# Simulateur géométallurgique de récupération  : Cahier des charges
 
 > Document de conception (`DESIGN.md`). Fige l'architecture, le périmètre et la
 > feuille de route du projet. Sert de ligne directrice unique pour le développement.
@@ -37,7 +37,7 @@ Point conceptuel central, à ne jamais confondre :
   (*element-to-mineral conversion*) : on ne fait jamais aveuglément confiance à
   l'un ou à l'autre, on résout par moindres carrés la déportation des éléments dans
   les phases pour rendre teneurs et minéralogie cohérentes (fermeture comprise).
-  Ce module est une brique à part entière — et un argument d'entretien fort.
+  Ce module est une brique à part entière et un argument d'entretien fort.
 
 ---
 
@@ -45,22 +45,22 @@ Point conceptuel central, à ne jamais confondre :
 
 Toute la logique se range en une pile, du mesuré vers le prédit :
 
-1. **Mesures** — teneurs XRF / ICP / fire assay : la vérité chimique.
-2. **Minéralogie modale** — proportions de phases (DRX + Rietveld), réconciliées
+1. **Mesures** : teneurs XRF / ICP / fire assay : la vérité chimique.
+2. **Minéralogie modale** : proportions de phases (DRX + Rietveld), réconciliées
    avec la couche 1, somme = 100 % (contrainte de fermeture).
-3. **Texture** — matrice d'**associations** entre phases (idéalement MLA/QEMSCAN)
+3. **Texture** : matrice d'**associations** entre phases (idéalement MLA/QEMSCAN)
    + **degré et maille de libération par minéral d'intérêt** (plusieurs éléments
    simultanés possibles : Au, Cu, Zn, Co…).
-4. **Granulométrie** — PSD fournie par l'utilisateur.
-5. **Propriétés intrinsèques** — base de données par minéral : densité,
+4. **Granulométrie** : PSD fournie par l'utilisateur.
+5. **Propriétés intrinsèques** :  base de données par minéral : densité,
    susceptibilité magnétique, hydrophobicité/flottabilité native. Extensible.
-6. **Moteur de séparation** — un modèle d'unité par voie, qui lit la base 5 et les
+6. **Moteur de séparation** : un modèle d'unité par voie, qui lit la base 5 et les
    réglages machine saisis par l'utilisateur.
-7. **Liant** — la libération **module tout** : une particule mixte (composite) ne
+7. **Liant** : la libération **module tout** : une particule mixte (composite) ne
    rapporte au concentré que partiellement. C'est la couche 3 qui gouverne le
    rendement du moteur 6.
 
-Paradigme sous-jacent : **« particle-based »** (Lamberg) — on ne sépare pas des
+Paradigme sous-jacent : **« particle-based »** (Lamberg) : on ne sépare pas des
 éléments, on sépare des **particules** dont le comportement dépend de leur contenu
 minéral et de leur degré de libération.
 
@@ -115,11 +115,11 @@ Deux objets légers complètent l'architecture : `SeparationUnit` (§6) et `Circ
 Les « types de minerai » sont des profils extensibles. Ajouter un gisement = ajouter
 un profil.
 
-### 5.1 `iron_flotation` — ossature validable
+### 5.1 `iron_flotation` : ossature validable
 Minerai de fer (hématite / magnétite / quartz). C'est le profil **calibré et validé
 quantitativement** contre des données industrielles publiques réelles (§8).
 
-### 5.2 `polymetallic_refractory_au` — extension de gamme
+### 5.2 `polymetallic_refractory_au` : extension de gamme
 Minerai aurifère sulfuré réfractaire, type gisements d'Albiti : chalcopyrite (CuFeS₂),
 sphalérite (ZnS), pyrite cobaltifère (FeS₂ + Co), arsénopyrite (FeAsS), gangue
 silicatée. Génère Cu, Zn, Co, As, Fe, SiO₂ + Au.
@@ -183,11 +183,11 @@ Notes physiques intégrées :
 physiques distinctes :
 1. Flottation (directe + inverse)
 2. Magnétique (LIMS/WHIMS, humide/sec)
-3. Gravimétrie – table à secousses
+3. Gravimétrie :  table à secousses, Séparateur Falcon et Hydrocyclone
 
 **Extensions déclarées** dans le registre mais non implémentées (visibles comme
 axes d'évolution) : **concentrateur centrifuge type Falcon** (vitesse de rotation +
-eau de fluidisation — retenu comme extension prioritaire), spirale, MGS.
+eau de fluidisation retenu comme extension prioritaire), spirale, MGS.
 
 Principe : trois voies bien faites valent mieux que six bâclées.
 
@@ -198,7 +198,7 @@ calibrées** (faute de données d'essais par machine). On ne prétend pas prédi
 point près ; on garantit les **bons sens de variation** et les bons **ordres de
 grandeur** (plus de collecteur → `k` monte puis plafonne ; broyage plus grossier →
 `d50` gravité se dégrade). Différence assumée entre modèle phénoménologique honnête
-et fausse précision. Documenté explicitement — c'est ce qui reste à calibrer avec de
+et fausse précision. Documenté explicitement c'est ce qui reste à calibrer avec de
 vrais essais.
 
 ---
@@ -209,7 +209,7 @@ vrais essais.
 - Chaque `Stream` est **conscient de la pulpe** : solides + eau + % solides + SG.
 - Densité solide du mélange par loi de mélange (§4).
 - **Charge circulante analytique sur un circuit fermé simple** (broyage fermé sur
-  cyclone, ou séparation avec recyclage) — pour *démontrer* la fermeture du bilan.
+  cyclone, ou séparation avec recyclage) pour *démontrer* la fermeture du bilan.
 
 Formules de référence :
 - Charge circulante (marqueur granulo) : `CL ≈ (o − f) / (f − u)`
@@ -233,15 +233,15 @@ de se cannibaliser.
 
 C'est ce qui répond au problème « pas de données Eramet » de façon élégante.
 
-- **Niveau 1 — données réelles (cas fer)** : le profil `iron_flotation` est calé et
+- **Niveau 1 : données réelles (cas fer)** : le profil `iron_flotation` est calé et
   validé contre le jeu public **Kaggle *Quality Prediction in a Mining Process***
   (usine de flottation de fer réelle, ~737 k lignes, cible % silice concentré).
   Validation quantitative.
 
-- **Niveau 2 — auto-cohérence physique (cas polymétallique)** : le générateur
+- **Niveau 2 : auto cohérence physique (cas polymétallique)** : le générateur
   connaît la « vérité » particule par particule, donc il simule la récupération
   *vraie*. Le prédicteur, lui, ne voit que la caractérisation limitée. On valide le
-  prédicteur contre la vérité du générateur — boucle auto-cohérente, sans données
+  prédicteur contre la vérité du générateur boucle auto-cohérente, sans données
   réelles.
 
 Deux niveaux de preuve = posture d'ingénieur solide.
@@ -250,7 +250,7 @@ Deux niveaux de preuve = posture d'ingénieur solide.
 
 ## 9. Limites assumées (section entretien)
 
-À écrire noir sur blanc dans le README — elles protègent et valorisent :
+À écrire noir sur blanc dans le README,  elles protègent et valorisent :
 - Le profil polymétallique est un modèle de plausibilité **non calibré** (pas de
   jeu public MLA/QEMSCAN pour associations/libération par taille).
 - Les valeurs stœchiométriques sont des approximations de manuel (sphalérite avec Fe
