@@ -1,4 +1,4 @@
-# Simulateur géométallurgique de récupération — Cahier des charges
+# Simulateur géométallurgique de récupération  : Cahier des charges
 
 > Document de conception (`DESIGN.md`). Fige l'architecture, le périmètre et la
 > feuille de route du projet. Sert de ligne directrice unique pour le développement.
