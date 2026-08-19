@@ -19,9 +19,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from i18n import t, LANGUAGES, param_label, option_label, route_label
+from i18n import t, LANGUAGES, param_label, option_label, route_label, profile_label
 from feed_generator import generate_feed, apply_p80, liberation_from_p80
 from mineralogy import ORE_PROFILES, MINERALS, assays_from_modal
+from mineral_properties import MINERAL_PROPERTIES
 from data_models import Stream, LiberationState
 from separation import SeparationUnit, SEPARATION_SPECS, separate
 from laws_gravity import gravity_recovery, gravity_cutpoint, gold_gravity_recovery
@@ -36,6 +37,24 @@ XRF_ELEMENTS = [
     "Fe", "Cu", "Zn", "Pb", "Au", "Ag", "Ni", "Co", "Sn", "W", "Mn", "Ti", "Cr", "V",
     "U", "Mo", "SiO2", "Al2O3", "CaO", "MgO", "K", "Na", "P", "S", "As", "Sb", "Bi", "F",
 ]
+import unicodedata
+
+def _normalize_name(name):
+    """Normalise un nom de phase pour la reconnaissance tolerante, car l'utilisateur peut
+    ecrire 'Hematite', 'hematite' ou 'HEMATITE' : ainsi on compare sans casse ni accents."""
+    s = str(name).strip().lower()
+    # Retire les accents.
+    s = "".join(c for c in unicodedata.normalize("NFD", s)
+                if unicodedata.category(c) != "Mn")
+    return s
+
+# Table de correspondance nom normalise -> cle technique de la base, construite une fois.
+_MINERAL_LOOKUP = {_normalize_name(k): k for k in MINERALS.keys()}
+
+def recognize_phase(name):
+    """Renvoie la cle technique d'une phase de la base si le nom saisi correspond (tolerant),
+    sinon None. Le nom AFFICHE reste celui de l'utilisateur ; on ne s'en sert qu'en coulisse."""
+    return _MINERAL_LOOKUP.get(_normalize_name(name))
 MAGNETIC_CATEGORIES = ["ferromagnetique", "paramagnetique",
                        "paramagnetique_faible", "diamagnetique"]
 
@@ -134,7 +153,17 @@ def perf_table(feed, streams_named, element):
     rows = []
     for name, s in streams_named:
         r = performance_row(feed, s, element)
-        rows.append({t("product", lang): name, **r})
+        # Maquillage des en-tetes : libelles lisibles, dynamiques selon le metal suivi, car
+        # les cles techniques (teneur_Fe_%...) ne sont pas presentables : ainsi on affiche
+        # des noms propres sans changer les valeurs.
+        unite = "g/t" if element == "Au" else "%"
+        rows.append({
+            t("product", lang): name,
+            t("perf_mass_tph", lang): r.get("masse_tph"),
+            t("perf_mass_recovery", lang): r.get("recup_massique_%"),
+            t("perf_grade", lang, el=element, u=unite): r.get(f"teneur_{element}_%"),
+            t("perf_metal_recovery", lang, el=element): r.get(f"recup_metal_{element}_%"),
+        })
     st.dataframe(rows, use_container_width=True)
 
 
@@ -220,7 +249,12 @@ custom_modal = None
 use_custom_minerals = False
 
 if mode_minerai == t("mode_profile", lang):
-    profile_name = st.sidebar.selectbox(t("profile", lang), options=list(ORE_PROFILES.keys()))
+    # On affiche des libelles lisibles mais on garde la CLE technique pour le calcul, car la
+    # logique du modele s'appuie sur la cle : ainsi presentation et technique restent decouplees.
+    profile_keys = list(ORE_PROFILES.keys())
+    profile_disp = [profile_label(k, lang) for k in profile_keys]
+    picked_profile = st.sidebar.selectbox(t("profile", lang), options=profile_disp)
+    profile_name = profile_keys[profile_disp.index(picked_profile)]
 
 elif mode_minerai == t("mode_base", lang):
     st.sidebar.markdown("**" + t("compose_base", lang) + "**")
@@ -437,8 +471,12 @@ with st.expander(t("xrf_section", lang), expanded=False):
         prev = st.session_state.get("xrf_manual_df")
         if prev is None:
             prev = pd.DataFrame({"element": XRF_ELEMENTS, "teneur_%": [0.0] * len(XRF_ELEMENTS)})
-        xrf_edited = st.data_editor(prev, num_rows="dynamic", use_container_width=True,
-                                    key="xrf_manual_editor")
+        xrf_edited = st.data_editor(
+            prev, num_rows="dynamic", use_container_width=True, key="xrf_manual_editor",
+            column_config={
+                "element": st.column_config.TextColumn(t("xrf_col_element", lang)),
+                "teneur_%": st.column_config.NumberColumn(t("xrf_col_grade", lang)),
+            })
         st.session_state["xrf_manual_df"] = xrf_edited
         xrf_data = {}
         for _, row in xrf_edited.iterrows():
@@ -500,8 +538,6 @@ with st.expander(t("xrf_section", lang), expanded=False):
 
 if use_custom_minerals:
     st.header(t("custom_def_header", lang))
-if use_custom_minerals:
-    st.header(t("custom_def_header", lang))
 
     # Import DRX : un CSV (mineral, proportion_%) pre-remplit les phases et leurs teneurs,
     # car une DRX donne la mineralogie mesuree : ainsi l'utilisateur charge ses phases, puis
@@ -549,29 +585,110 @@ if use_custom_minerals:
         except Exception as e:
             st.error(t("drx_parse_err", lang, err=str(e)))
 
+    # ---- Ajout guide d'une phase : selection dans la base (pre-remplie) OU saisie libre ----
+    st.markdown("**" + t("add_phase_title", lang) + "**")
+    base_phases = list(MINERALS.keys())
+    AUTRE = t("add_phase_other", lang)
+    ac1, ac2 = st.columns([3, 1])
+    phase_choice = ac1.selectbox(t("add_phase_select", lang), options=base_phases + [AUTRE],
+                                 key="phase_choice")
+    libre_nom = ""
+    if phase_choice == AUTRE:
+        libre_nom = ac1.text_input(t("add_phase_freename", lang), key="phase_free_name")
+    ac2.markdown("<div style='height:1.8em'></div>", unsafe_allow_html=True)  # aligne le bouton sous le selectbox
+    if ac2.button(t("add_phase_btn", lang), key="add_phase_btn"):
+        # Initialise la liste des phases si absente.
+        if "custom_rows" not in st.session_state:
+            st.session_state["custom_rows"] = []
+        if phase_choice == AUTRE:
+            nom = libre_nom.strip()
+            if nom:
+                st.session_state["custom_rows"].append({
+                    "mineral": nom, "proportion_%": 0.0,
+                    "densite_g_cm3": 2.65, "magnetique": "diamagnetique",
+                    "flottabilite_0_1": 0.1})
+        else:
+            # Phase connue : proprietes pre-remplies depuis la base.
+            props = MINERAL_PROPERTIES.get(phase_choice, {})
+            st.session_state["custom_rows"].append({
+                "mineral": phase_choice, "proportion_%": 0.0,
+                "densite_g_cm3": props.get("density", 2.65),
+                "magnetique": props.get("magnetic", "diamagnetique"),
+                "flottabilite_0_1": props.get("floatability", 0.1)})
+
     st.markdown("**" + t("table1_props", lang) + "**")
-    # Le tableau part de la DRX chargee si presente, sinon d'un exemple.
-    if st.session_state.get("drx_rows"):
+    # Source du tableau : les phases ajoutees (session) ou la DRX chargee. On demarre VIDE
+    # (une colonne definie mais aucune ligne) car l'utilisateur compose ses phases via le
+    # selecteur "Ajouter une phase" : ainsi pas d'exemple fictif a supprimer.
+    if st.session_state.get("custom_rows"):
+        default_props = pd.DataFrame(st.session_state["custom_rows"])
+    elif st.session_state.get("drx_rows"):
         default_props = pd.DataFrame(st.session_state["drx_rows"])
     else:
-        default_props = pd.DataFrame([
-            {"mineral": "mon_mineral_1", "proportion_%": 5.0, "densite_g_cm3": 4.2,
-             "magnetique": "paramagnetique_faible", "flottabilite_0_1": 0.9},
-            {"mineral": "gangue", "proportion_%": 95.0, "densite_g_cm3": 2.65,
-             "magnetique": "diamagnetique", "flottabilite_0_1": 0.1},
-        ])
+        default_props = pd.DataFrame(
+            columns=["mineral", "proportion_%", "densite_g_cm3", "magnetique", "flottabilite_0_1"])
+    if default_props.empty:
+        st.info(t("add_phase_empty", lang))
     custom_props = st.data_editor(
         default_props, num_rows="dynamic", use_container_width=True,
         column_config={
-            "magnetique": st.column_config.SelectboxColumn(options=MAGNETIC_CATEGORIES),
-            "flottabilite_0_1": st.column_config.NumberColumn(min_value=0.0, max_value=1.0),
+            "mineral": st.column_config.TextColumn(t("col_mineral", lang)),
+            "proportion_%": st.column_config.NumberColumn(t("col_proportion", lang)),
+            "densite_g_cm3": st.column_config.NumberColumn(t("col_density", lang)),
+            "magnetique": st.column_config.SelectboxColumn(t("col_magnetic", lang),
+                                                           options=MAGNETIC_CATEGORIES),
+            "flottabilite_0_1": st.column_config.NumberColumn(t("col_floatability", lang),
+                                                              min_value=0.0, max_value=1.0),
         }, key="props_editor")
+    # On resauve les editions de l'utilisateur, car le tableau est la source de verite des
+    # valeurs : ainsi les ajouts (bouton) et les editions manuelles coexistent proprement.
+    # Reconnaissance des phases tapees : si le nom correspond a une phase de la base (tolerant)
+    # ET que ses proprietes sont vides, on les complete depuis la base, SANS changer le nom
+    # affiche (option b, mapping en coulisse) : ainsi taper "Hematite" remplit ses proprietes.
+    filled = custom_props.to_dict("records")
+    for row in filled:
+        key = recognize_phase(row.get("mineral", ""))
+        if key is not None:
+            props = MINERAL_PROPERTIES.get(key, {})
+            # densite : completer si vide/nulle
+            d = row.get("densite_g_cm3")
+            if d is None or (isinstance(d, float) and (pd.isna(d) or d == 0.0)):
+                row["densite_g_cm3"] = props.get("density", 2.65)
+            # magnetisme : completer si vide
+            mg = row.get("magnetique")
+            if mg is None or str(mg).strip() == "" or (isinstance(mg, float) and pd.isna(mg)):
+                row["magnetique"] = props.get("magnetic", "diamagnetique")
+            # flottabilite : completer si vide/nulle
+            fl = row.get("flottabilite_0_1")
+            if fl is None or (isinstance(fl, float) and (pd.isna(fl) or fl == 0.0)):
+                row["flottabilite_0_1"] = props.get("floatability", 0.1)
+    st.session_state["custom_rows"] = filled
+    # Bouton pour repartir de zero (vider les phases), car l'utilisateur peut vouloir
+    # recommencer sa composition.
+    if st.button(t("add_phase_clear", lang), key="clear_phases"):
+        st.session_state["custom_rows"] = []
+        st.rerun()
     st.markdown("**" + t("table2_chem", lang) + "**")
     minerals_list = [m for m in custom_props["mineral"].tolist() if str(m).strip()]
-    chem_init = pd.DataFrame({"mineral": minerals_list})
-    for el in XRF_ELEMENTS:
-        chem_init[el] = 0.0
-    custom_chem = st.data_editor(chem_init, use_container_width=True, key="chem_editor")
+    # Pre-remplissage de la chimie : pour une phase CONNUE de la base, on ecrit sa
+    # stoechiometrie (MINERALS donne des fractions -> x100 pour des %), car on connait sa
+    # composition : ainsi l'utilisateur ne resaisit que la chimie des phases inconnues.
+    chem_rows = []
+    for m in minerals_list:
+        row = {"mineral": m}
+        key = recognize_phase(m)                 # reconnaissance tolerante
+        stoech = MINERALS.get(key, {}) if key else {}   # stoechio si phase reconnue
+        for el in XRF_ELEMENTS:
+            frac = stoech.get(el, 0.0)
+            row[el] = round(frac * 100.0, 3)   # fraction -> % massique
+        chem_rows.append(row)
+    if chem_rows:
+        chem_init = pd.DataFrame(chem_rows)
+    else:
+        chem_init = pd.DataFrame(columns=["mineral"] + XRF_ELEMENTS)
+    custom_chem = st.data_editor(
+        chem_init, use_container_width=True, key="chem_editor",
+        column_config={"mineral": st.column_config.TextColumn(t("col_mineral", lang))})
 
 circuit_editor = None
 if is_circuit:
@@ -782,24 +899,19 @@ if st.session_state.get("has_result"):
         rows = []
         hors_modele = []
         for el, mesure in xrf_data.items():
-            if el == "Au":
-                # Or : XRF en % converti en g/t (1% = 10000 g/t) pour comparer a Au_gt.
-                reconstruit = feed.assays.get("Au_gt", 0.0)
-                mesure_val = mesure * 10000.0
-                unite = "g/t"
-            elif el in feed.assays:
+            # On compare les elements chimiques majeurs (en %). L'or et les sous-cles d'or
+            # (Au_gt...) ne sont pas compares ici, car une XRF ne dose pas l'or (pyroanalyse) :
+            # ainsi un "Au" saisi dans la XRF est traite comme hors modele plutot que converti.
+            if el in feed.assays and not el.startswith("Au"):
                 reconstruit = feed.assays.get(el, 0.0)
-                mesure_val = mesure
-                unite = "%"
+                rows.append({
+                    t("xrf_element", lang): f"{el} (%)",
+                    t("xrf_measured", lang): round(mesure, 3),
+                    t("xrf_reconstructed", lang): round(reconstruit, 3),
+                    t("xrf_gap", lang): round(mesure - reconstruit, 3),
+                })
             else:
                 hors_modele.append(f"{el} ({mesure})")
-                continue
-            rows.append({
-                t("xrf_element", lang): f"{el} ({unite})",
-                t("xrf_measured", lang): round(mesure_val, 3),
-                t("xrf_reconstructed", lang): round(reconstruit, 3),
-                t("xrf_gap", lang): round(mesure_val - reconstruit, 3),
-            })
         if rows:
             st.dataframe(rows, use_container_width=True)
         if hors_modele:

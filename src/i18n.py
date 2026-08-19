@@ -208,7 +208,11 @@ TRANSLATIONS = {
                            "en": "REQUIRED: complete density, magnetism and floatability of each phase in the table below."},
     "drx_none_known": {"fr": "Aucune phase valide dans le fichier.", "en": "No valid phase in the file."},
     "drx_parse_err": {"fr": "Erreur de lecture : {err}", "en": "Read error: {err}"},
-
+    "col_mineral": {"fr": "Mineral", "en": "Mineral"},
+    "col_proportion": {"fr": "Proportion (%)", "en": "Proportion (%)"},
+    "col_density": {"fr": "Densite (g/cm3)", "en": "Density (g/cm3)"},
+    "col_magnetic": {"fr": "Magnetisme", "en": "Magnetism"},
+    "col_floatability": {"fr": "Flottabilite (0-1)", "en": "Floatability (0-1)"},
     # ----- Courbe teneur-recuperation -----
     "gr_curve_title": {"fr": "Courbe teneur-recuperation", "en": "Grade-recovery curve"},
     "gr_curve_simple_caption": {
@@ -289,7 +293,19 @@ TRANSLATIONS = {
     "cut_mode_direct": {"fr": "Coupure directe (d50/Ep)", "en": "Direct cut (d50/Ep)"},
     "d50_label": {"fr": "d50 - densite de coupure", "en": "d50 - cut density"},
     "ep_label": {"fr": "Ep - nettete de coupure", "en": "Ep - cut sharpness"},
-    
+   "add_phase_title": {"fr": "Ajouter une phase", "en": "Add a phase"},
+    "add_phase_select": {"fr": "Choisir une phase de la base", "en": "Choose a phase from the base"},
+    "add_phase_other": {"fr": "Autre (saisie libre)", "en": "Other (free entry)"},
+    "add_phase_freename": {"fr": "Nom de la phase", "en": "Phase name"},
+    "add_phase_btn": {"fr": "Ajouter", "en": "Add"},
+    "add_phase_clear": {"fr": "Vider les phases", "en": "Clear phases"},
+    "add_phase_empty": {"fr": "Aucune phase pour l'instant. Ajoutez-en une ci-dessus.", "en": "No phase yet. Add one above."}, 
+    "perf_mass_tph": {"fr": "Masse (t/h)", "en": "Mass (t/h)"},
+    "perf_mass_recovery": {"fr": "Recuperation massique (%)", "en": "Mass recovery (%)"},
+    "perf_grade": {"fr": "Teneur {el} ({u})", "en": "{el} grade ({u})"},
+    "perf_metal_recovery": {"fr": "Recuperation {el} (%)", "en": "{el} recovery (%)"},
+    "xrf_col_element": {"fr": "Element", "en": "Element"},
+    "xrf_col_grade": {"fr": "Teneur (%)", "en": "Grade (%)"},
 }
 # ============================================================================
 # Libelles des parametres machine, car les cles techniques
@@ -323,6 +339,7 @@ PARAM_LABELS = {
     "diameter_cm": {"fr": "Diametre du cyclone (cm)", "en": "Cyclone diameter (cm)"},
     "pressure_kpa": {"fr": "Pression d'alimentation (kPa)", "en": "Feed pressure (kPa)"},
     "continue_flux": {"fr": "Flux qui continue", "en": "Continuing flow"},
+    
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).
@@ -348,7 +365,13 @@ ROUTE_LABELS = {
     'ball_mill': {'fr': 'Broyeur à boulets', 'en': 'Ball mill'},
     'hydrocyclone': {'fr': 'Hydrocyclone', 'en': 'Hydrocyclone'},
 }
-
+PROFILE_LABELS = {
+    "iron_flotation": {"fr": "Fer (flottation)", "en": "Iron (flotation)"},
+    "iron_flotation_vale": {"fr": "Fer type Vale (flottation inverse)", "en": "Vale-type iron (reverse flotation)"},
+    "polymetallic_refractory_au": {"fr": "Or refractaire polymetallique", "en": "Polymetallic refractory gold"},
+    "polymetallic_pb_cu_zn": {"fr": "Polymetallique Pb-Cu-Zn", "en": "Polymetallic Pb-Cu-Zn"},
+    "polymetallic_au_cu_zn_pb": {"fr": "Polymetallique aurifere Au-Cu-Zn-Pb", "en": "Gold-bearing polymetallic Au-Cu-Zn-Pb"},
+}
 
 def route_label(route, lang="fr"):
     """Libelle lisible d'une voie de separation, meme principe que param_label."""
@@ -365,6 +388,14 @@ def param_label(param, lang="fr"):
         return param
     return entry.get(lang) or entry.get("fr") or param
 
+def profile_label(key, lang):
+    """Libelle lisible d'un profil de minerai, car les cles techniques (iron_flotation...)
+    ne sont pas presentables : ainsi on affiche un nom propre, en retombant sur la cle si
+    elle n'est pas encore traduite."""
+    entry = PROFILE_LABELS.get(key)
+    if entry is None:
+        return key
+    return entry.get(lang, entry.get("en", key))
 
 def option_label(value, lang="fr"):
     """Libelle lisible d'une option (ex. type de collecteur), meme principe."""
