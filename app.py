@@ -536,6 +536,125 @@ with st.expander(t("xrf_section", lang), expanded=False):
             except Exception as e:
                 st.error(t("xrf_parse_err", lang, err=str(e)))
 
+# ============================ MEB (liberation mesuree + associations) ============================
+with st.expander(t("meb_section", lang), expanded=False):
+    st.caption(t("meb_caption", lang))
+    meb_choice = st.radio(t("meb_mode_label", lang),
+                          [t("meb_none", lang), t("meb_manual", lang), t("meb_csv", lang)],
+                          horizontal=True, key="meb_mode", label_visibility="collapsed")
+
+    if meb_choice == t("meb_none", lang):
+        st.session_state["meb_liberation"] = None
+        st.session_state["meb_associations"] = None
+
+    elif meb_choice == t("meb_manual", lang):
+        # Ajout guide d'un mineral (selection base OU saisie libre), comme pour les phases.
+        base_min = list(MINERALS.keys())
+        AUTRE_MEB = t("add_phase_other", lang)
+        mc1, mc2 = st.columns([3, 1])
+        meb_pick = mc1.selectbox(t("meb_add_select", lang), options=base_min + [AUTRE_MEB],
+                                 key="meb_phase_pick")
+        meb_libre = ""
+        if meb_pick == AUTRE_MEB:
+            meb_libre = mc1.text_input(t("add_phase_freename", lang), key="meb_free_name")
+        mc2.markdown("<div style='height:1.8em'></div>", unsafe_allow_html=True)
+        if mc2.button(t("add_phase_btn", lang), key="meb_add_btn"):
+            if "meb_rows" not in st.session_state:
+                st.session_state["meb_rows"] = []
+            nom = meb_libre.strip() if meb_pick == AUTRE_MEB else meb_pick
+            if nom:
+                st.session_state["meb_rows"].append(
+                    {"mineral": nom, "liberation_0_1": 0.0, "association": ""})
+
+        # Tableau : demarre vide, editable, lignes supprimables (num_rows dynamic).
+        meb_source = st.session_state.get("meb_rows", [])
+        if meb_source:
+            prev = pd.DataFrame(meb_source)
+        else:
+            prev = pd.DataFrame(columns=["mineral", "liberation_0_1", "association"])
+            st.info(t("meb_empty_hint", lang))
+        meb_edited = st.data_editor(
+            prev, num_rows="dynamic", use_container_width=True, key="meb_manual_editor",
+            column_config={
+                "mineral": st.column_config.TextColumn(t("col_mineral", lang)),
+                "liberation_0_1": st.column_config.NumberColumn(t("meb_col_lib", lang),
+                                                                min_value=0.0, max_value=1.0),
+                "association": st.column_config.TextColumn(t("meb_col_assoc", lang)),
+            })
+        # On resauve pour que ajouts (bouton) et editions/suppressions (tableau) coexistent.
+        st.session_state["meb_rows"] = meb_edited.to_dict("records")
+        st.session_state["meb_manual_df"] = meb_edited
+        meb_lib = {}
+        meb_assoc = {}
+        for _, row in meb_edited.iterrows():
+            m = str(row["mineral"]).strip()
+            if not m or m.lower() == "nan":
+                continue
+            try:
+                lib_v = float(row["liberation_0_1"])
+            except (ValueError, TypeError):
+                continue
+            if lib_v > 0:
+                meb_lib[m] = lib_v
+            assoc = str(row.get("association", "")).strip()
+            if assoc and assoc.lower() != "nan":
+                meb_assoc[m] = assoc
+        st.session_state["meb_liberation"] = meb_lib if meb_lib else None
+        st.session_state["meb_associations"] = meb_assoc if meb_assoc else None
+        if meb_lib:
+            st.caption(t("meb_loaded_info", lang, n=len(meb_lib)))
+        if meb_assoc:
+            st.info(t("meb_assoc_note", lang))
+
+    elif meb_choice == t("meb_csv", lang):
+        st.caption(t("meb_csv_caption", lang))
+        modele_meb = ("Mineral;Liberation (0-1);Association\n"
+                      "pyrite_co;0.75;quartz\nchalcopyrite;0.60;pyrite_co\n")
+        st.download_button(t("meb_template", lang), data=modele_meb,
+                           file_name="modele_meb.csv", mime="text/csv", key="meb_tmpl")
+        meb_file = st.file_uploader(t("meb_upload", lang), type=["csv"], key="meb_uploader")
+        if meb_file is not None:
+            try:
+                df_meb = pd.read_csv(meb_file, sep=None, engine="python")
+                cols = {c.lower().strip(): c for c in df_meb.columns}
+                def find_cm(cands):
+                    for k in cols:
+                        kn = k.replace(" ", "").replace("(0-1)", "").replace("_", "")
+                        for cand in cands:
+                            if cand in kn:
+                                return cols[k]
+                    return None
+                min_col = find_cm(["mineral", "phase"])
+                lib_col = find_cm(["liberation", "liber"])
+                assoc_col = find_cm(["association", "assoc"])
+                if min_col is None or lib_col is None:
+                    st.error(t("meb_cols_err", lang))
+                else:
+                    meb_lib = {}
+                    meb_assoc = {}
+                    for _, row in df_meb.iterrows():
+                        m = str(row[min_col]).strip()
+                        if not m or m.lower() == "nan":
+                            continue
+                        try:
+                            meb_lib[m] = float(row[lib_col])
+                        except (ValueError, TypeError):
+                            pass
+                        if assoc_col is not None:
+                            a = str(row[assoc_col]).strip()
+                            if a and a.lower() != "nan":
+                                meb_assoc[m] = a
+                    if meb_lib:
+                        st.session_state["meb_liberation"] = meb_lib
+                        st.session_state["meb_associations"] = meb_assoc if meb_assoc else None
+                        st.success(t("meb_ok", lang, n=len(meb_lib)))
+                        if meb_assoc:
+                            st.info(t("meb_assoc_note", lang))
+                    else:
+                        st.error(t("meb_empty_err", lang))
+            except Exception as e:
+                st.error(t("meb_parse_err", lang, err=str(e)))
+
 if use_custom_minerals:
     st.header(t("custom_def_header", lang))
 
@@ -791,6 +910,18 @@ def plot_partition_curve(grid, d50, sharpness, lang):
     fig.tight_layout()
     st.pyplot(fig, use_container_width=False)
 
+def apply_meb_liberation(feed):
+    """Applique la liberation mesuree au MEB, car elle est plus fiable que celle derivee du
+    P80 : ainsi on ECRASE, mineral par mineral, le degre de liberation pour les mineraux
+    fournis (les autres gardent la valeur derivee). L'or multi-modes n'est pas touche."""
+    meb = st.session_state.get("meb_liberation")
+    if not meb:
+        return feed
+    for mineral, degre in meb.items():
+        if mineral in feed.liberation.degree:
+            feed.liberation.degree[mineral] = float(degre)
+    return feed
+
 def build_feed():
     prop_lookup = None
     assay_func = None
@@ -806,7 +937,8 @@ def build_feed():
             feed.psd_curve = list(st.session_state["psd_manual_curve"])  # apply_p80 la reconstruit, on re-impose la saisie
         else:
             # Recalcule liberation ET distribution de l'or selon le P80 du curseur.
-            apply_p80(feed, p80)
+           apply_p80(feed, p80)
+        apply_meb_liberation(feed)
         return feed, prop_lookup, assay_func
     if custom_modal is not None:
         total = sum(custom_modal.values())
@@ -818,6 +950,7 @@ def build_feed():
         lib = LiberationState(degree={m: liberation_from_p80(p80) for m in modal})
         feed = Stream(name="minerai_base", solids_tph=feed_tph, modal=modal,
                       liberation=lib, p80_um=p80, assays=assays)
+        apply_meb_liberation(feed)
         return feed, prop_lookup, assay_func
     props = custom_props.copy()
     props = props[props["mineral"].astype(str).str.strip() != ""]
@@ -860,6 +993,7 @@ def build_feed():
 # ============================ LANCEMENT : stockage en session ============================
 if lancer:
     feed, prop_lookup, assay_func = build_feed()
+    apply_meb_liberation(feed)   # ecrase la liberation par les mesures MEB si fournies
     st.session_state["feed"] = feed
     st.session_state["prop_lookup"] = prop_lookup
     st.session_state["assay_func"] = assay_func
