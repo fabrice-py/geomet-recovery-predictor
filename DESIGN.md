@@ -221,11 +221,31 @@ Formules de référence :
 Livrable : un **tableau de bilan matière-eau qui boucle** (par stream : t/h solides,
 t/h eau, % solides, teneurs, récupération cumulée).
 
-### 7.2 Frontière avec le Projet 2 (décision figée)
-Le **solveur général multi-nœuds avec réconciliation** est le cœur du **Projet 2**
-(mini-USIM PAC). Le Projet 1 s'arrête à la charge circulante analytique d'un circuit
-fermé simple. Les deux projets se répondent (le README du P1 renverra au P2) au lieu
-de se cannibaliser.
+### 7.2 Charge circulante : solveur général réalisé (dépassement du périmètre initial)
+
+Le périmètre initial prévoyait de renvoyer le solveur général multi-nœuds au Projet 2
+(mini-USIM PAC). **Ce solveur a finalement été construit dans ce projet.** La charge
+circulante n'est plus traitée de façon analytique sur un cas simple : elle est résolue
+par un **moteur de flowsheet à graphe générique** (`flowsheet.py`) capable de traiter
+n'importe quelle topologie, y compris les boucles.
+
+Principe du solveur :
+- Le circuit est décrit en **nœuds** (unités) + **connexions** (quelle sortie alimente
+  quel nœud). Une boucle est simplement une connexion vers un nœud amont.
+- Un circuit **sans boucle** est résolu en une passe par **tri topologique**.
+- Un circuit **fermé** est résolu par la **méthode du tear stream / point fixe** : on
+  coupe les arêtes de retour, on les suppose vides, puis on itère en réinjectant le flux
+  de retour estimé jusqu'à **stabilisation** du débit (convergence à un seuil).
+- La **convergence** est surveillée finement : distinction entre convergence lente et
+  vraie divergence (écarts croissants), plafond de charge circulante (10× l'alimentation),
+  statuts explicites (`converged`, `diverged`, `circulating_load_too_high`, `max_iter_reached`).
+- **Conservation de masse globale** vérifiée au régime permanent (test automatisé) : la
+  charge circulante tourne en boucle sans créer ni détruire de masse.
+
+L'interface (mode multi-voies) permet de composer une série d'étages puis d'ajouter des
+**retours** (une sortie qui reboucle vers un étage antérieur), ce qui construit le graphe
+en interne. Le moteur étant générique, une évolution future vers un éditeur de connexions
+complet (topologies quelconques) ne demanderait que d'étendre l'interface, pas le moteur.
 
 ---
 
@@ -265,29 +285,44 @@ Deux niveaux de preuve = posture d'ingénieur solide.
 
 | Sujet | Décision |
 |---|---|
-| Niveau de libération | **Option A** (scalaire par minéral) d'abord, schéma **ouvert vers B** (particulaire) |
-| Voies implémentées | **3** : flottation (directe/inverse), magnétique (LIMS/WHIMS, humide/sec), table à secousses |
-| Extension prioritaire | Concentrateur **Falcon** (déclaré, non implémenté) |
-| Charge circulante | **Analytique**, circuit fermé simple (solveur général → Projet 2) |
-| Ancre de validation | Profil **fer** vs données **Kaggle** réelles |
-| Profils | `iron_flotation` (validé) + `polymetallic_refractory_au` (plausibilité) |
+| Niveau de libération | **Option A** (scalaire par minéral), enrichie par la libération mesurée au MEB ; **Option B** (par associations) = prochain grand chantier |
+| Voies implémentées | Gravité (table, spirale, Falcon), magnétique (LIMS/WHIMS, humide/sec), flottation (directe/inverse), broyeur à boulets (Bond), hydrocyclone (Tromp) |
+| Granulométrie | PSD complète (Rosin–Rammler), grille éditable, P80 dérivé de la PSD ; traverse broyage et classification |
+| Charge circulante | **Solveur général à graphe** (tear stream / point fixe), toutes topologies, convergence robuste le « Projet 2 » a été absorbé ici |
+| Données réelles | Chargement PSD, DRX, XRF (avec comparaison), MEB (libération mesurée) ; saisie manuelle + CSV |
+| Validation | Suite **pytest** : conservation de masse (séparation, circuit, cyclone, charge circulante) + invariants physiques |
+| Profils | `iron_flotation`, `polymetallic_refractory_au`, `polymetallic_pb_cu_zn`, `polymetallic_au_cu_zn_pb` |
 
 ---
 
-## 11. Feuille de route des séances
+## 11. Feuille de route (état réel)
 
-| Séance | Contenu | Livrable |
+Le projet a dépassé son cahier des charges initial de 7 séances. État actuel :
+
+**Réalisé :**
+| Bloc | Contenu | État |
 |---|---|---|
-| **S0** | Environnement conda, dépôt Git, arborescence | ✅ Repo en ligne |
-| **S1** | Générateur → objets `Stream` complets (minéralogie → teneurs → pulpe), profils fer + polymétallique | Module `feed_generator.py` + figures |
-| **S2** | Base de propriétés minérales + `close_pulp` (densités, SG pulpe) | Premier bilan-eau sur un stream |
-| **S3** | Moteur de séparation par voie (gravi / LIMS-WHIMS / flottation), piloté par la libération et les réglages machine | Module séparation + courbes de partage |
-| **S4** | Circuit fermé simple + charge circulante analytique | Tableau de bilan qui boucle |
-| **S5** | Données Kaggle (cas fer) : calage et validation | Notebook de validation |
-| **S6** | Modèle data-driven + confrontation physique/data | Analyse de robustesse (SHAP) |
-| **S7** | Finition : tests pytest, README, figures, CI (badge vert) | Repo « d'ingénieur » |
+| Fondations | `Stream` complet (minéralogie → teneurs → pulpe), profils de minerai | ✅ |
+| Propriétés minérales | Base densités / magnétisme / flottabilité + pulpe | ✅ |
+| Moteur de séparation | Gravité (table/spirale/Falcon), magnétique (LIMS/WHIMS), flottation, piloté par libération et réglages machine | ✅ |
+| Or multi-modes | Or natif / sulfures / gangue, recouvrement gravimétrique et par flottation, cascade selon le broyage | ✅ |
+| Granulométrie (PSD) | Grille éditable, génération Rosin–Rammler, P80 dérivé, traverse tout le flowsheet | ✅ |
+| Broyeur à boulets | Loi de Bond (énergie + indice de travail → réduction de P80 + libération) | ✅ |
+| Hydrocyclone | Classification par taille, courbe de partage de Tromp, deux flux | ✅ |
+| Charge circulante | Moteur de flowsheet à graphe, tear stream / point fixe, convergence robuste | ✅ |
+| Données réelles | Chargement PSD, DRX, XRF (comparaison), MEB (libération mesurée) — manuel + CSV | ✅ |
+| Interface | Multilingue FR/EN, habillage des libellés, sélection guidée des phases | ✅ |
+| Tests | Suite pytest : conservation de masse + invariants physiques | ✅ |
+| Documentation | README bilingue, DESIGN à jour | ✅ |
 
-Chaque séance se clôt par un `commit` + `push`.
+**À venir :**
+| Bloc | Contenu |
+|---|---|
+| Libération par associations (Option B) | Les associations MEB (déjà collectées) influenceront gravité / flottation / magnétique des particules mixtes |
+| Calibration | Caler les constantes phénoménologiques sur données mesurées |
+| Raffinements | Hydrocyclone (effet densité, apex/vortex), CI (badge), script de lancement |
+
+Chaque bloc se clôt par un `commit` + `push`.
 
 ---
 
