@@ -1,4 +1,4 @@
-# Geometallurgical Flowsheet Simulator
+﻿# Geometallurgical Flowsheet Simulator
 
 A physics-based simulator for mineral processing flowsheets, written in Python with a
 Streamlit interface. It predicts how an ore behaves through configurable separation,

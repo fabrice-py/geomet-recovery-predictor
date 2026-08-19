@@ -1,5 +1,7 @@
 # Simulateur géométallurgique de récupération  : Cahier des charges
 
+*[English version: DESIGN.en.md](DESIGN.en.md)*
+
 > Document de conception (`DESIGN.md`). Fige l'architecture, le périmètre et la
 > feuille de route du projet. Sert de ligne directrice unique pour le développement.
 
@@ -310,7 +312,7 @@ Le projet a dépassé son cahier des charges initial de 7 séances. État actuel
 | Broyeur à boulets | Loi de Bond (énergie + indice de travail → réduction de P80 + libération) | ✅ |
 | Hydrocyclone | Classification par taille, courbe de partage de Tromp, deux flux | ✅ |
 | Charge circulante | Moteur de flowsheet à graphe, tear stream / point fixe, convergence robuste | ✅ |
-| Données réelles | Chargement PSD, DRX, XRF (comparaison), MEB (libération mesurée) — manuel + CSV | ✅ |
+| Données réelles | Chargement PSD, DRX, XRF (comparaison), MEB (libération mesurée) - manuel + CSV | ✅ |
 | Interface | Multilingue FR/EN, habillage des libellés, sélection guidée des phases | ✅ |
 | Tests | Suite pytest : conservation de masse + invariants physiques | ✅ |
 | Documentation | README bilingue, DESIGN à jour | ✅ |
