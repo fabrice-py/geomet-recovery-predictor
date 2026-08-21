@@ -332,6 +332,9 @@ TRANSLATIONS = {
     "meb_add_select": {"fr": "Ajouter un mineral (base ou libre)", "en": "Add a mineral (base or free)"},
     "meb_empty_hint": {"fr": "Aucun mineral. Ajoutez-en un ci-dessus (selection ou saisie libre).",
                        "en": "No mineral. Add one above (selection or free entry)."},
+    "flowsheet_diagram": {"fr": "Schema du circuit", "en": "Flowsheet diagram"},
+    "feed_node_label": {"fr": "ALIMENTATION", "en": "FEED"},
+    "final_node_label": {"fr": "Sortie", "en": "Output"},
 }
 # ============================================================================
 # Libelles des parametres machine, car les cles techniques

@@ -910,6 +910,32 @@ def plot_partition_curve(grid, d50, sharpness, lang):
     fig.tight_layout()
     st.pyplot(fig, use_container_width=False)
 
+def flowsheet_to_dot(flowsheet, lang):
+    """Genere le code DOT (Graphviz) d'un flowsheet, car le moteur raisonne en graphe : ainsi
+    on dessine les unites (boites) et les flux (fleches), y compris les boucles de charge
+    circulante, reflet exact de ce que le solveur resout."""
+    from flowsheet import FEED_NODE, FINAL_SINK
+    out = ["digraph flowsheet {", "  rankdir=LR;",
+           '  node [shape=box, style="rounded,filled", fillcolor="#eef2f7", fontname="Arial", fontsize=11];',
+           '  edge [fontname="Arial", fontsize=9, color="#555555"];',
+           f'  "{FEED_NODE}" [label="{t("feed_node_label", lang)}", shape=ellipse, fillcolor="#d4edda"];']
+    for node_id, node in flowsheet["nodes"].items():
+        route = route_label(node["unit_type"], lang)
+        out.append(f'  "{node_id}" [label="{node_id}\\n({route})"];')
+    sink_count = 0
+    for c in flowsheet["connections"]:
+        src_node, src_out = c["from"]
+        dst = c["to"]
+        if dst == FINAL_SINK:
+            sink_count += 1
+            sink_id = f"__final_{sink_count}"
+            out.append(f'  "{sink_id}" [label="{t("final_node_label", lang)}", shape=ellipse, fillcolor="#f8d7da"];')
+            out.append(f'  "{src_node}" -> "{sink_id}" [label="{src_out}"];')
+        else:
+            out.append(f'  "{src_node}" -> "{dst}" [label="{src_out}"];')
+    out.append("}")
+    return "\n".join(out)
+
 def apply_meb_liberation(feed):
     """Applique la liberation mesuree au MEB, car elle est plus fiable que celle derivee du
     P80 : ainsi on ECRASE, mineral par mineral, le degre de liberation pour les mineraux
@@ -1085,6 +1111,12 @@ if st.session_state.get("has_result"):
                 st.error(t("cc_too_high", lang))
             else:
                 st.warning(t("cc_max_iter", lang, n=circ["n_iter"]))
+
+        # Schema visuel du circuit, car le moteur raisonne en graphe : ainsi l'utilisateur
+        # VOIT son flowsheet (unites, flux, et boucles de charge circulante) tel qu'il est resolu.
+        if result.get("flowsheet"):
+            st.subheader(t("flowsheet_diagram", lang))
+            st.graphviz_chart(flowsheet_to_dot(result["flowsheet"], lang))
 
         # Un bloc de resultats par etage, car chaque etage a sa voie et son metal suivi :
         # ainsi on lit la performance de chaque etage sur SON metal d'interet.

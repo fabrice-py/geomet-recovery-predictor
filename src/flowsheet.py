@@ -542,4 +542,5 @@ def run_series_as_graph(feed, stages, prop_lookup=None, assay_func=None,
 
     return {"concentrates": concentrates, "final_tail": final_tail,
             "stage_feeds": stage_feeds, "mill_outputs": mill_outputs,
-            "cyclone_outputs": cyclone_outputs, "circulating": res}
+            "cyclone_outputs": cyclone_outputs, "circulating": res,
+            "flowsheet": fs}
