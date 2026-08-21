@@ -14,7 +14,7 @@ viendront au 5b.
 import math
 
 from mineral_properties import MINERAL_PROPERTIES
-
+from liberation_physics import effective_floatability_assoc
 
 def kinetic_recovery(rmax, k, t):
     """
@@ -85,9 +85,26 @@ def flotation_recovery(stream, unit, mineral_props=None):
     rmax_bonus = 0.10 * (1.0 - math.exp(-s["frother_gpt"] / 25.0))
     ph = s["pulp_ph"]
 
+    # Table des flottabilites de tous les mineraux du flux, car les associations ont besoin de
+    # la flottabilite des mineraux associes (pas seulement celle du mineral courant).
+    floatab_table = {mm: effective_floatability(mm, s, mineral_props=mineral_props)
+                     for mm in stream.modal}
+    associations = getattr(stream.liberation, "associations", None)
+    depressed = s.get("depressed_minerals", [])
+    activated = s.get("activated_minerals", [])
+
     recovery = {}
     for m in stream.modal:
-        floatab = effective_floatability(m, s, mineral_props=mineral_props)
+        floatab = floatab_table[m]
+        # Associations (chemin 2) : la flottabilite depend de la liberation. On enrichit
+        # SEULEMENT la flottabilite native, car depression/activation sont des choix chimiques
+        # de l'operateur qui priment : ainsi un mineral deprime reste deprime quelle que soit
+        # sa liberation. Fallback si pas d'association (comportement actuel).
+        if m not in depressed and m not in activated:
+            lib = stream.liberation.degree.get(m, 1.0)
+            f_assoc = effective_floatability_assoc(m, floatab, lib, associations, floatab_table)
+            if f_assoc is not None:
+                floatab = f_assoc
         rmax = min(0.98, 0.02 + 0.95 * (floatab ** 2) + rmax_bonus)
         k = (0.15 + 1.60 * floatab) * dose_factor * bell
 

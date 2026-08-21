@@ -87,3 +87,42 @@ def effective_susceptibility_assoc(mineral, chi_pur, lib, associations, suscepti
         chi_locked += frac * chi_mix
 
     return lib * chi_pur + (1.0 - lib) * chi_locked
+
+def mixed_floatability(f_a, f_b, w_bias=0.6):
+    """Flottabilite d'une particule mixte A-B (modele C, biaise vers le composant le plus
+    flottable), car la flottation est un phenomene de SURFACE : un peu d'hydrophobe suffit a
+    accrocher la particule a une bulle, mais la gangue accolee dilue le concentre. Ainsi la
+    particule mixte flotte MIEUX que la moyenne, sans atteindre le pur.
+    f_mixte = w_bias * max + (1 - w_bias) * moyenne. w_bias a caler."""
+    return w_bias * max(f_a, f_b) + (1.0 - w_bias) * (f_a + f_b) / 2.0
+
+
+def effective_floatability_assoc(mineral, f_pur, lib, associations, floatabilities,
+                                 w_bias=0.6):
+    """Flottabilite effective d'un mineral tenant compte de sa LIBERATION et de ses
+    ASSOCIATIONS, car la flottabilite d'une particule depend de son degre de liberation.
+
+    - part liberee (lib) : flottabilite pure du mineral.
+    - part non liberee (1-lib) : flottabilite des particules mixtes (modele C), repartie
+      selon les associations MEB.
+    - fallback : si pas d'association, renvoie None (l'appelant garde la flottabilite pure,
+      comportement actuel sans effet de liberation).
+
+    floatabilities : dict {mineral: floatability} pour retrouver celle des associes.
+    """
+    assoc = (associations or {}).get(mineral)
+    if not assoc:
+        return None
+
+    total = sum(assoc.values())
+    if total <= 1e-12:
+        return None
+    fracs = {k: v / total for k, v in assoc.items()}
+
+    f_locked = 0.0
+    for assoc_mineral, frac in fracs.items():
+        f_assoc = floatabilities.get(assoc_mineral, 0.05)   # flottabilite de l'associe (gangue par defaut)
+        f_mix = mixed_floatability(f_pur, f_assoc, w_bias=w_bias)
+        f_locked += frac * f_mix
+
+    return lib * f_pur + (1.0 - lib) * f_locked
