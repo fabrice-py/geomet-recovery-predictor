@@ -76,7 +76,7 @@ TRANSLATIONS = {
     "process_header": {"fr": "3. Traitement", "en": "3. Process"},
     "process_type": {"fr": "Type", "en": "Type"},
     "process_simple": {"fr": "Separation simple", "en": "Single separation"},
-    "process_circuit": {"fr": "Circuit", "en": "Circuit"},
+    "process_circuit": {"fr": "Flottation differentielle Cu-Zn", "en": "Differential flotation Cu-Zn"},
     "sep_route": {"fr": "Voie de separation", "en": "Separation route"},
     "unit_type": {"fr": "Type d'unite", "en": "Unit type"},
     "machine_settings": {"fr": "Reglages machine", "en": "Machine settings"},
