@@ -119,3 +119,4 @@ de façon cohérente dans le flowsheet non dans une précision industrielle des 
 Fabrice TSAMO -Iingénieur des Mines / Géométallurgie.
 GitHub : [fabrice-py](https://github.com/fabrice-py)
 LinkedIn account : www.linkedin.com/in/fabrice-tsamo
+![tests](https://github.com/fabrice-py/geomet-recovery-predictor/actions/workflows/tests.yml/badge.svg)
