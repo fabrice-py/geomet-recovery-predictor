@@ -23,7 +23,12 @@ class LiberationState:
         de libération par minéral. Laissé à None pour l'instant.
     """
     degree: dict                              # {mineral: float entre 0 et 1}
-    classes: Optional[dict] = None            # hook Option B (non utilisé en A)
+    classes: Optional[dict] = None            # hook Option B (distribution de liberation, futur)
+    associations: Optional[dict] = None       # {mineral: {mineral_associe: fraction}}, car la
+                                              # fraction NON liberee d'un mineral est accolee a
+                                              # des mineraux specifiques (donnee MEB) : ainsi on
+                                              # pourra calculer une propriete effective realiste.
+                                              # None = pas de donnee -> fallback comportement actuel.
 
     def mean_liberation(self) -> float:
         """Libération moyenne (utile pour un résumé rapide)."""
