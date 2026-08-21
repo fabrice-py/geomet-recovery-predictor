@@ -110,3 +110,4 @@ not in plant-accurate predictions.
 Fabrice TSAMO - Mining / Geometallurgy Engineer.
 GitHub: [fabrice-py](https://github.com/fabrice-py)
 LinkedIn account : www.linkedin.com/in/fabrice-tsamo
+![tests](https://github.com/fabrice-py/geomet-recovery-predictor/actions/workflows/tests.yml/badge.svg)
