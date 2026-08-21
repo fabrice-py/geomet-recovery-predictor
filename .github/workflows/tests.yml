@@ -1,4 +1,3 @@
-@'
 name: tests
 
 on:
@@ -27,4 +26,3 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v
-'@ | Out-File -FilePath .github\workflows\tests.yml -Encoding utf8
