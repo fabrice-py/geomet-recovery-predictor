@@ -49,3 +49,41 @@ def effective_density_assoc(mineral, rho_pur, lib, mean_density, associations, d
         rho_locked += frac * rho_mix
 
     return lib * rho_pur + (1.0 - lib) * rho_locked
+
+def mixed_susceptibility(chi_a, chi_b, w_a=0.5):
+    """Susceptibilite d'une particule mixte A-B, car la susceptibilite MASSIQUE d'un melange
+    est la moyenne ARITHMETIQUE ponderee par la masse (les moments magnetiques s'additionnent
+    par unite de masse) : ainsi, contrairement a la densite, ce n'est PAS une moyenne
+    harmonique. Par defaut 50/50 en masse (D2)."""
+    w_b = 1.0 - w_a
+    return w_a * chi_a + w_b * chi_b
+
+
+def effective_susceptibility_assoc(mineral, chi_pur, lib, associations, susceptibilities,
+                                   w_host=0.5):
+    """Susceptibilite effective d'un mineral tenant compte de ses ASSOCIATIONS.
+
+    - part liberee (lib) : susceptibilite pure du mineral.
+    - part non liberee (1-lib) : repartie selon les associations MEB ; chaque association
+      contribue par la susceptibilite de la particule mixte (moyenne arithmetique massique).
+    - fallback : si pas d'association, renvoie None (l'appelant applique la formule historique,
+      qui tire vers le diamagnetique).
+
+    susceptibilities : dict {mineral: chi} pour retrouver la susceptibilite des associes.
+    """
+    assoc = (associations or {}).get(mineral)
+    if not assoc:
+        return None
+
+    total = sum(assoc.values())
+    if total <= 1e-12:
+        return None
+    fracs = {k: v / total for k, v in assoc.items()}
+
+    chi_locked = 0.0
+    for assoc_mineral, frac in fracs.items():
+        chi_assoc = susceptibilities.get(assoc_mineral, 0.0)   # susceptibilite de l'associe
+        chi_mix = mixed_susceptibility(chi_pur, chi_assoc, w_a=w_host)
+        chi_locked += frac * chi_mix
+
+    return lib * chi_pur + (1.0 - lib) * chi_locked

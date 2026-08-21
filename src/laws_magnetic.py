@@ -12,6 +12,7 @@ vise les bons sens de variation et non une précision calibrée.
 import math
 
 from mineral_properties import MINERAL_PROPERTIES
+from liberation_physics import effective_susceptibility_assoc
 
 # Traduction catégorie magnétique -> susceptibilité indicative (échelle 0-1), car la
 # base stocke une catégorie texte alors que le calcul de seuil exige un nombre : ainsi
@@ -41,19 +42,25 @@ def magnetic_recovery(stream, threshold, sharpness, mineral_props=None):
 
     threshold, sharpness : fournis par la machine selon son mode et son champ.
     """
+    # Table des susceptibilites de tous les mineraux du flux, car les associations ont besoin
+    # de la susceptibilite des mineraux associes (pas seulement celle du mineral courant).
+    def chi_of(mineral):
+        if mineral_props is not None and mineral in mineral_props:
+            return SUSCEPTIBILITY[mineral_props[mineral]["magnetic"]]
+        return SUSCEPTIBILITY[MINERAL_PROPERTIES[mineral]["magnetic"]]
+    susceptibilities = {mm: chi_of(mm) for mm in stream.modal}
+
+    associations = getattr(stream.liberation, "associations", None)
     recovery = {}
     for m in stream.modal:
-        if mineral_props is not None and m in mineral_props:
-            cat = mineral_props[m]["magnetic"]
-        else:
-            cat = MINERAL_PROPERTIES[m]["magnetic"]
-        chi = SUSCEPTIBILITY[cat]
-        # Susceptibilite effective ponderee par la liberation, car un grain magnetique mal
-        # degage de sa gangue se comporte comme un composite moins magnetique : ainsi broyer
-        # fin (meilleure liberation) rapproche chi de sa valeur pleine et ameliore la capture.
+        chi = susceptibilities[m]
         lib = stream.liberation.degree.get(m, 0.85)
-        chi_diamag = SUSCEPTIBILITY["diamagnetique"]
-        chi_eff = lib * chi + (1 - lib) * chi_diamag
+        # Associations (chemin 2) : la part non liberee prend la susceptibilite de ses
+        # particules mixtes reelles ; sinon fallback historique (tiree vers le diamagnetique).
+        chi_eff = effective_susceptibility_assoc(m, chi, lib, associations, susceptibilities)
+        if chi_eff is None:
+            chi_diamag = SUSCEPTIBILITY["diamagnetique"]
+            chi_eff = lib * chi + (1 - lib) * chi_diamag
         recovery[m] = round(magnetic_capture(chi_eff, threshold, sharpness), 4)
     return recovery
 
