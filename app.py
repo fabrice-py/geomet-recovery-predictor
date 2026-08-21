@@ -105,6 +105,30 @@ from size_classes import DEFAULT_GRID_UM
 if "grid" not in st.session_state:
     st.session_state["grid"] = list(DEFAULT_GRID_UM)
 
+def parse_associations(text):
+    """Parse une saisie d'associations 'mineral:fraction, mineral:fraction' en dict pondere,
+    car l'utilisateur decrit avec quoi un mineral est associe et dans quelles proportions :
+    ainsi 'quartz:0.6, chalcopyrite:0.4' -> {'quartz': 0.6, 'chalcopyrite': 0.4}. Les
+    fractions sont normalisees a 1 par la physique. Tolere aussi 'quartz' seul (-> 1.0)."""
+    text = str(text).strip()
+    if not text or text.lower() == "nan":
+        return None
+    result = {}
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            name, _, frac = part.partition(":")
+            name = name.strip()
+            try:
+                result[name] = float(frac.strip())
+            except (ValueError, TypeError):
+                result[name] = 1.0   # fraction illisible -> poids par defaut
+        else:
+            result[part] = 1.0        # mineral seul sans fraction -> poids 1
+    return result if result else None
+
 # ============================ FONCTIONS PARTAGEES ============================
 def apply_unit_ui(stream, unit, prop_lookup=None, assay_func=None,
                   direct_d50=None, direct_ep=None):
@@ -596,9 +620,9 @@ with st.expander(t("meb_section", lang), expanded=False):
                 continue
             if lib_v > 0:
                 meb_lib[m] = lib_v
-            assoc = str(row.get("association", "")).strip()
-            if assoc and assoc.lower() != "nan":
-                meb_assoc[m] = assoc
+            assoc_parsed = parse_associations(row.get("association", ""))
+            if assoc_parsed:
+                meb_assoc[m] = assoc_parsed
         st.session_state["meb_liberation"] = meb_lib if meb_lib else None
         st.session_state["meb_associations"] = meb_assoc if meb_assoc else None
         if meb_lib:
@@ -641,9 +665,9 @@ with st.expander(t("meb_section", lang), expanded=False):
                         except (ValueError, TypeError):
                             pass
                         if assoc_col is not None:
-                            a = str(row[assoc_col]).strip()
-                            if a and a.lower() != "nan":
-                                meb_assoc[m] = a
+                            a_parsed = parse_associations(row[assoc_col])
+                            if a_parsed:
+                                meb_assoc[m] = a_parsed
                     if meb_lib:
                         st.session_state["meb_liberation"] = meb_lib
                         st.session_state["meb_associations"] = meb_assoc if meb_assoc else None
@@ -937,17 +961,23 @@ def flowsheet_to_dot(flowsheet, lang):
     return "\n".join(out)
 
 def apply_meb_liberation(feed):
+    st.warning(f"DEBUG associations feed : {feed.liberation.associations}")
     """Applique la liberation mesuree au MEB, car elle est plus fiable que celle derivee du
     P80 : ainsi on ECRASE, mineral par mineral, le degre de liberation pour les mineraux
-    fournis (les autres gardent la valeur derivee). L'or multi-modes n'est pas touche."""
+    fournis (les autres gardent la valeur derivee). L'or multi-modes n'est pas touche.
+    Applique AUSSI les associations mineralogiques (chemin 2), qui influencent les trois voies
+    de separation via la physique des particules mixtes."""
     meb = st.session_state.get("meb_liberation")
-    if not meb:
-        return feed
-    for mineral, degre in meb.items():
-        if mineral in feed.liberation.degree:
-            feed.liberation.degree[mineral] = float(degre)
+    if meb:
+        for mineral, degre in meb.items():
+            if mineral in feed.liberation.degree:
+                feed.liberation.degree[mineral] = float(degre)
+    # Associations : posees sur le feed pour que gravite/magnetique/flottation les exploitent.
+    assoc = st.session_state.get("meb_associations")
+    if assoc:
+        feed.liberation.associations = assoc
     return feed
-
+    
 def build_feed():
     prop_lookup = None
     assay_func = None

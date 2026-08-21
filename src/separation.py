@@ -157,7 +157,9 @@ def separate(stream, recovery_by_mineral, gold_recovery=None,
                 assays["Au_sulfide_gt"] = round(mode_grams["sulfide"] / total, 3)
                 assays["Au_native_gt"] = round(mode_grams["native"] / total, 3)
                 assays["Au_gangue_recoverable_gt"] = round(mode_grams["gangue"] / total, 3)
-        lib = LiberationState(degree=dict(stream.liberation.degree))
+        lib = LiberationState(degree=dict(stream.liberation.degree),
+                              classes=stream.liberation.classes,
+                              associations=stream.liberation.associations)
         return Stream(
             name=f"{stream.name}_{name}",
             solids_tph=round(total, 4),
