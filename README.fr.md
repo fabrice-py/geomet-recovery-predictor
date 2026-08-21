@@ -1,6 +1,7 @@
 # Simulateur géométallurgique de flowsheet
 
 *[English version](README.md)*
+![tests](https://github.com/fabrice-py/geomet-recovery-predictor/actions/workflows/tests.yml/badge.svg)
 
 Un simulateur de traitement du minerai fondé sur la physique, écrit en Python avec une
 interface Streamlit. Il prédit le comportement d'un minerai à travers des circuits
@@ -119,4 +120,4 @@ de façon cohérente dans le flowsheet non dans une précision industrielle des 
 Fabrice TSAMO -Iingénieur des Mines / Géométallurgie.
 GitHub : [fabrice-py](https://github.com/fabrice-py)
 LinkedIn account : www.linkedin.com/in/fabrice-tsamo
-![tests](https://github.com/fabrice-py/geomet-recovery-predictor/actions/workflows/tests.yml/badge.svg)
+
