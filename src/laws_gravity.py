@@ -9,7 +9,7 @@ machine, produit la récupération par minéral qu'attend la machinerie separate
 import math
 
 from mineral_properties import get_densities
-
+from liberation_physics import effective_density_assoc
 RHO_WATER = 1.0
 
 
@@ -64,10 +64,17 @@ def gravity_recovery(stream, d50, ep, densities=None):
     w = {m: stream.modal[m] / 100.0 for m in stream.modal}
     mean_density = sum(w[m] * densities[m] for m in w)
 
+    # Associations minerales (chemin 2) : la fraction non liberee est accolee a des mineraux
+    # specifiques (donnee MEB). Si un mineral a des associations, sa densite effective en tient
+    # compte (particules mixtes) ; sinon, fallback sur la formule historique (moyenne du minerai).
+    associations = getattr(stream.liberation, "associations", None)
     recovery = {}
     for m in stream.modal:
         lib = stream.liberation.degree.get(m, 1.0)
-        rho_eff = effective_density(densities[m], lib, mean_density)
+        rho_eff = effective_density_assoc(m, densities[m], lib, mean_density,
+                                          associations, densities)
+        if rho_eff is None:   # pas d'association pour ce mineral -> comportement actuel
+            rho_eff = effective_density(densities[m], lib, mean_density)
         recovery[m] = round(partition_probability(rho_eff, d50, ep), 4)
     return recovery
 
