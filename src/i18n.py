@@ -368,7 +368,7 @@ PARAM_LABELS = {
     "diameter_cm": {"fr": "Diametre du cyclone (cm)", "en": "Cyclone diameter (cm)"},
     "pressure_kpa": {"fr": "Pression d'alimentation (kPa)", "en": "Feed pressure (kPa)"},
     "continue_flux": {"fr": "Flux qui continue", "en": "Continuing flow"},
-    
+    "pct_solids": {"fr": "% solides (densite de pulpe)", "en": "% solids (pulp density)"},  
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).

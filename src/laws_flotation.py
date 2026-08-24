@@ -32,6 +32,22 @@ def rotor_bell_factor(rpm, rpm_opt=1200.0, width=350.0):
     """
     return math.exp(-((rpm - rpm_opt) ** 2) / (2 * width ** 2))
 
+def solids_effect_flotation(pct_solids, optimum=32.0):
+    """Effet du % solides sur la flottation (phenomenologique, leger), car la densite de pulpe
+    conditionne la cinetique et la selectivite :
+    - trop dilue (< optimum) : moins de collisions bulle-particule -> k reduit (facteur < 1).
+    - trop dense (> optimum) : mousse chargee -> entrainement de gangue (recuperation parasite).
+    Retour : (k_factor, entrainment). k_factor module la cinetique ; entrainment ajoute une
+    recuperation parasite aux mineraux peu flottables."""
+    ecart = pct_solids - optimum
+    if ecart < 0:
+        k_factor = max(0.6, 1.0 + 0.0075 * ecart)   # dilue -> k baisse doucement
+        entrainment = 0.0
+    else:
+        k_factor = 1.0
+        entrainment = min(0.15, 0.0035 * ecart)      # dense -> entrainement leger
+    return k_factor, entrainment
+
 def effective_floatability(mineral, unit_settings, mineral_props=None):
     """
     Flottabilité effective d'un minéral selon le collecteur et les modificateurs, car la
@@ -84,6 +100,9 @@ def flotation_recovery(stream, unit, mineral_props=None):
     bell = rotor_bell_factor(s["rotor_speed_rpm"])
     rmax_bonus = 0.10 * (1.0 - math.exp(-s["frother_gpt"] / 25.0))
     ph = s["pulp_ph"]
+    # Effet du % solides (densite de pulpe) : k reduit si trop dilue, entrainement de gangue si
+    # trop dense, car la densite de pulpe conditionne collisions et selectivite.
+    k_solids, entrainment = solids_effect_flotation(s.get("pct_solids", 32.0))
 
     # Table des flottabilites de tous les mineraux du flux, car les associations ont besoin de
     # la flottabilite des mineraux associes (pas seulement celle du mineral courant).
@@ -106,13 +125,21 @@ def flotation_recovery(stream, unit, mineral_props=None):
             if f_assoc is not None:
                 floatab = f_assoc
         rmax = min(0.98, 0.02 + 0.95 * (floatab ** 2) + rmax_bonus)
-        k = (0.15 + 1.60 * floatab) * dose_factor * bell
+        k = (0.15 + 1.60 * floatab) * dose_factor * bell * k_solids   # % solides module la cinetique
 
         # Dépression de la pyrite en milieu alcalin (uniquement flottation directe).
         if m == "pyrite_co" and not reverse:
             rmax *= ph_pyrite_factor(ph)
 
         float_frac = kinetic_recovery(rmax, k, t)   # fraction montant dans la mousse
+
+        # Entrainement mecanique (% solides eleve) : les mineraux PEU flottables sont emportes
+        # dans la mousse chargee, car une pulpe dense entraine la gangue sans selectivite : ainsi
+        # on ajoute une recuperation parasite proportionnelle a l'entrainement, plus forte pour
+        # les mineraux peu flottables (deja peu montants). Ne s'applique qu'en flottation directe.
+        if not reverse and entrainment > 0:
+            # Poids d'entrainement : maximal pour un mineral non flottable (float_frac faible).
+            float_frac = float_frac + entrainment * (1.0 - float_frac)
 
         # Conversion mousse -> concentré, car en flottation inverse la mousse est le
         # rejet : ainsi le concentré récupère ce qui NE monte PAS.
