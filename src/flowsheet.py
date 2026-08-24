@@ -154,8 +154,10 @@ def apply_node(unit_type, settings, feed_stream, prop_lookup=None, assay_func=No
         grind_stream(ground, work_index=settings.get("work_index", 15.0),
                      energy_kwht=settings.get("energy_kwht", 10.0),
                      grid=grid, apply_p80_func=apply_p80_func,
-                     pct_solids=settings.get("pct_solids", 75.0),
-                     mode=settings.get("mode", "humide"))
+                                          pct_solids=settings.get("pct_solids", 75.0),
+                     mode=settings.get("mode", "humide"),
+                     filling_pct=settings.get("filling_pct", 37.0),
+                     comblement_u=settings.get("comblement_u", 1.0))
         return {"out": ground}
     
     if unit_type == "hydrocyclone":

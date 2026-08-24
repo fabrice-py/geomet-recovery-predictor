@@ -369,6 +369,8 @@ PARAM_LABELS = {
     "pressure_kpa": {"fr": "Pression d'alimentation (kPa)", "en": "Feed pressure (kPa)"},
     "continue_flux": {"fr": "Flux qui continue", "en": "Continuing flow"},
     "pct_solids": {"fr": "% solides (densite de pulpe)", "en": "% solids (pulp density)"},  
+    "filling_pct": {"fr": "Taux de remplissage en boulets Jb (%)", "en": "Ball filling Jb (%)"},
+    "comblement_u": {"fr": "Comblement interstitiel U", "en": "Interstitial filling U"},
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).
