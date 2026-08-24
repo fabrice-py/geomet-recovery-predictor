@@ -383,6 +383,8 @@ OPTION_LABELS = {
     "WHIMS_dry": {"fr": "Haute intensite, voie seche", "en": "High intensity, dry"},
     "overflow": {"fr": "Surverse (fins)", "en": "Overflow (fines)"},
     "underflow": {"fr": "Sousverse (grossiers)", "en": "Underflow (coarse)"},
+    "humide": {"fr": "Voie humide", "en": "Wet"},
+    "sec": {"fr": "Voie seche", "en": "Dry"},
 }
 
 ROUTE_LABELS = {

@@ -63,6 +63,8 @@ SEPARATION_SPECS = {
     "ball_mill": {
         "work_index": {"min": 5.0, "max": 25.0, "default": 15.0},
         "energy_kwht": {"min": 5.0, "max": 30.0, "default": 10.0},
+        "mode": {"choices": ["humide", "sec"], "default": "humide"},
+        "pct_solids": {"min": 30.0, "max": 80.0, "default": 75.0},
     },
     "hydrocyclone": {
         "diameter_cm": {"min": 5.0, "max": 50.0, "default": 15.0},

@@ -7,6 +7,18 @@ taille, ponderee par la durete du minerai (indice de travail Wi).
 import numpy as np
 from size_classes import make_psd_rosin_rammler, p80_from_psd, DEFAULT_GRID_UM
 
+def solids_effect_grinding(pct_solids, mode, optimum=75.0):
+    """Effet du % solides sur le broyage HUMIDE (phenomenologique), car la densite de pulpe
+    conditionne le transfert d'energie des boulets aux particules :
+    - trop dense (> optimum) : la pulpe amortit les impacts (les boulets 'pataugent').
+    - trop dilue (< optimum) : moins de particules entre boulet et blindage (contacts perdus).
+    Hors optimum, l'energie UTILE au broyage baisse -> moins de reduction de P80.
+    Ne s'applique qu'en voie humide : en sec, pas de pulpe (facteur 1).
+    Retour : facteur d'efficacite energetique (<= 1) qui module l'energie specifique."""
+    if mode != "humide":
+        return 1.0
+    ecart = abs(pct_solids - optimum)
+    return max(0.5, 1.0 - 0.010 * ecart)
 
 def bond_product_p80(f80, work_index, energy_kwht):
     """
@@ -23,7 +35,8 @@ def bond_product_p80(f80, work_index, energy_kwht):
     return round(min(p80, f80), 2)
 
 
-def grind_stream(stream, work_index, energy_kwht, grid=None, apply_p80_func=None):
+def grind_stream(stream, work_index, energy_kwht, grid=None, apply_p80_func=None,
+                 pct_solids=75.0, mode="humide"):
     """
     Applique un broyage a un flux (en place), car le broyeur transforme la PSD et la
     liberation sans toucher a la masse ni a la mineralogie : ainsi on calcule le P80 de
@@ -38,8 +51,13 @@ def grind_stream(stream, work_index, energy_kwht, grid=None, apply_p80_func=None
         f80 = p80_from_psd(grid, stream.psd_curve)
     else:
         f80 = stream.p80_um
-    # P80 de sortie par la loi de Bond.
-    p80_out = bond_product_p80(f80, work_index, energy_kwht)
+    # Effet du % solides : une pulpe hors optimum reduit l'energie UTILE au broyage, car elle
+    # amortit les impacts (dense) ou disperse les contacts (dilue) : ainsi on module l'energie
+    # specifique par un facteur d'efficacite avant d'appliquer la loi de Bond.
+    eff = solids_effect_grinding(pct_solids, mode)
+    energy_effective = energy_kwht * eff
+    # P80 de sortie par la loi de Bond, avec l'energie effective.
+    p80_out = bond_product_p80(f80, work_index, energy_effective)
     # Reconstruction PSD + liberation via apply_p80 (qui refait PSD et cascade de liberation).
     if apply_p80_func is not None:
         apply_p80_func(stream, p80_out, grid=grid)

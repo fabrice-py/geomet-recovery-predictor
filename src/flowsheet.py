@@ -153,7 +153,9 @@ def apply_node(unit_type, settings, feed_stream, prop_lookup=None, assay_func=No
         ground = copy.deepcopy(feed_stream)
         grind_stream(ground, work_index=settings.get("work_index", 15.0),
                      energy_kwht=settings.get("energy_kwht", 10.0),
-                     grid=grid, apply_p80_func=apply_p80_func)
+                     grid=grid, apply_p80_func=apply_p80_func,
+                     pct_solids=settings.get("pct_solids", 75.0),
+                     mode=settings.get("mode", "humide"))
         return {"out": ground}
 
     if unit_type == "hydrocyclone":

@@ -69,7 +69,9 @@ def run_series(feed, stages, prop_lookup=None, assay_func=None,
             ground = copy.deepcopy(current)
             grind_stream(ground, work_index=s.get("work_index", 15.0),
                          energy_kwht=s.get("energy_kwht", 10.0),
-                         grid=grid, apply_p80_func=apply_p80_func)
+                         grid=grid, apply_p80_func=apply_p80_func,
+                         pct_solids=s.get("pct_solids", 75.0),
+                         mode=s.get("mode", "humide"))
             mill_outputs[stage_name] = ground
             current = ground
         elif unit.unit_type == "hydrocyclone":
