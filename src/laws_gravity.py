@@ -37,6 +37,17 @@ def effective_density(mineral_density, liberation_degree, mean_density):
     # liberation = 1 -> densité pure ; liberation = 0 -> densité moyenne du minerai.
     return liberation_degree * mineral_density + (1 - liberation_degree) * mean_density
 
+def solids_effect_gravity(pct_solids, optimum=22.0):
+    """Effet du % solides sur la gravite (phenomenologique, leger), car la densite de pulpe
+    conditionne la stratification par densite :
+    - trop dense (> optimum) : viscosite elevee, les particules ne se stratifient plus -> Ep
+      AUGMENTE (coupure floue). Effet plus fort cote dense.
+    - trop dilue (< optimum) : turbulence, legere degradation aussi (plus douce).
+    Retour : facteur multiplicatif sur Ep (>= 1), car degrader la coupure = augmenter Ep."""
+    ecart = pct_solids - optimum
+    if ecart > 0:
+        return 1.0 + 0.020 * ecart       # dense : Ep monte plus vite
+    return 1.0 + 0.010 * abs(ecart)      # dilue : Ep monte doucement
 
 def gravity_recovery(stream, d50, ep, densities=None):
     """
@@ -191,7 +202,9 @@ def gravity_cutpoint(unit):
 
     else:
         raise ValueError(f"{unit.unit_type} n'est pas un concentrateur gravimétrique")
-
+    # Effet du % solides : une pulpe hors de l'optimum degrade la stratification, donc AUGMENTE
+    # l'Ep (coupure floue), car la viscosite (dense) ou la turbulence (dilue) brouillent le tri.
+    ep *= solids_effect_gravity(s.get("pct_solids", 22.0))
     return round(d50, 3), round(max(ep, 0.05), 3)
 
 if __name__ == "__main__":

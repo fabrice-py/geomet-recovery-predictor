@@ -23,18 +23,21 @@ SEPARATION_SPECS = {
         "deck_slope_deg": {"min": 1.5, "max": 6.0, "default": 3.0},
         "stroke_freq_hz": {"min": 4.0, "max": 7.0, "default": 5.5},
         "wash_water_lpm": {"min": 5.0, "max": 40.0, "default": 20.0},
+        "pct_solids": {"min": 10.0, "max": 45.0, "default": 22.0},
         "_d50_range": (2.9, 6.5),   # plage de densité de coupure accessible
         "_ep_base": 0.8,           # netteté nominale (bonne)
     },
     "spiral": {
         "feed_rate_tph": {"min": 1.0, "max": 6.0, "default": 3.0},
         "splitter_pos": {"min": 0.2, "max": 0.8, "default": 0.5},
+        "pct_solids": {"min": 10.0, "max": 45.0, "default": 22.0},
         "_d50_range": (3.2, 5.0),   # coupe plus haut, plus grossier
         "_ep_base": 0.55,           # tri moins net qu'une table
     },
     "falcon": {
         "rotation_g": {"min": 50.0, "max": 300.0, "default": 150.0},
         "fluid_water_lpm": {"min": 2.0, "max": 20.0, "default": 8.0},
+        "pct_solids": {"min": 10.0, "max": 45.0, "default": 22.0},
         "_d50_range": (2.7, 4.0),   # la force G permet de couper plus bas (ultrafines)
         "_ep_base": 0.50,           # centrifuge : tri correct mais large
     },
