@@ -66,9 +66,10 @@ SEPARATION_SPECS = {
         "mode": {"choices": ["humide", "sec"], "default": "humide"},
         "pct_solids": {"min": 30.0, "max": 80.0, "default": 75.0},
     },
-    "hydrocyclone": {
+        "hydrocyclone": {
         "diameter_cm": {"min": 5.0, "max": 50.0, "default": 15.0},
         "pressure_kpa": {"min": 20.0, "max": 300.0, "default": 100.0},
+        "pct_solids": {"min": 10.0, "max": 60.0, "default": 50.0},
         "continue_flux": {"choices": ["overflow", "underflow"], "default": "overflow"},
     },
 }

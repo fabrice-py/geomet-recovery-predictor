@@ -157,12 +157,12 @@ def apply_node(unit_type, settings, feed_stream, prop_lookup=None, assay_func=No
                      pct_solids=settings.get("pct_solids", 75.0),
                      mode=settings.get("mode", "humide"))
         return {"out": ground}
-
+    
     if unit_type == "hydrocyclone":
         over, under = classify_stream(
             feed_stream, diameter_cm=settings.get("diameter_cm", 15.0),
             pressure_kpa=settings.get("pressure_kpa", 100.0), grid=grid,
-            apply_p80_func=apply_p80_func)
+            apply_p80_func=apply_p80_func, pct_solids=settings.get("pct_solids", 50.0))
         return {"overflow": over, "underflow": under}
 
     # Separateurs classiques (gravite, magnetique, flottation).

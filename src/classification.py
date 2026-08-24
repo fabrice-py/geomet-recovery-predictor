@@ -11,11 +11,12 @@ import numpy as np
 from size_classes import class_representative_sizes, p80_from_psd, DEFAULT_GRID_UM
 
 
-def cyclone_cutpoint(diameter_cm, pressure_kpa, sharpness=3.0):
+def cyclone_cutpoint(diameter_cm, pressure_kpa, sharpness=3.0, pct_solids=50.0):
     """
     d50 de coupure (um) d'un hydrocyclone, car l'utilisateur regle un diametre et une
     pression, pas un d50 : ainsi une correlation simplifiee (type Plitt) donne d50 ~
     Dc^0.5 / P^0.25 -> gros cyclone coupe grossier, forte pression coupe fin.
+    Le % solides decale le d50 (pulpe dense -> classification genee -> d50 plus grossier).
     Retour : (d50_um, sharpness).
     """
     dc = max(float(diameter_cm), 1.0)
@@ -23,8 +24,17 @@ def cyclone_cutpoint(diameter_cm, pressure_kpa, sharpness=3.0):
     # Constante calee pour des d50 realistes (quelques um a ~100 um).
     k_const = 45
     d50 = k_const * (dc ** 0.5) / (p ** 0.25)
+    d50 *= solids_effect_cyclone(pct_solids)   # decalage du a la densite de pulpe
     return round(d50, 2), sharpness
 
+def solids_effect_cyclone(pct_solids, reference=50.0):
+    """Effet du % solides sur le d50 d'un hydrocyclone (phenomenologique), car une pulpe dense
+    est plus visqueuse et gene la classification : ainsi le d50 AUGMENTE avec la densite de
+    pulpe (les fines qui devraient partir en surverse sont retenues). Effet MONOTONE (decalage
+    de coupure, pas un optimum), fidele a la correlation de Plitt qui inclut la concentration
+    en solides. reference = % solides ou le d50 nominal s'applique."""
+    ecart = pct_solids - reference
+    return max(0.3, 1.0 + 0.020 * ecart)   # borne basse pour eviter un d50 absurde si tres dilue
 
 def cyclone_partition(size_um, d50, sharpness):
     """Probabilite qu'une particule de taille donnee parte a l'UNDERFLOW (grossier), car la
@@ -35,7 +45,7 @@ def cyclone_partition(size_um, d50, sharpness):
 
 
 def classify_stream(stream, diameter_cm, pressure_kpa, grid=None,
-                    sharpness=3.0, apply_p80_func=None):
+                    sharpness=3.0, apply_p80_func=None, pct_solids=50.0):
     """
     Partage un flux en overflow (fin) + underflow (grossier) par classification en taille,
     car chaque classe granulometrique va majoritairement d'un cote selon sa taille : ainsi
@@ -50,7 +60,7 @@ def classify_stream(stream, diameter_cm, pressure_kpa, grid=None,
         raise ValueError("classify_stream exige une PSD sur le flux (psd_curve).")
 
     sizes = class_representative_sizes(grid)   # taille representative de chaque classe
-    d50, sharp = cyclone_cutpoint(diameter_cm, pressure_kpa, sharpness)
+    d50, sharp = cyclone_cutpoint(diameter_cm, pressure_kpa, sharpness, pct_solids=pct_solids)
     psd = stream.psd_curve
 
     # Pour chaque classe : fraction de sa masse qui part a l'underflow (le reste a l'overflow).

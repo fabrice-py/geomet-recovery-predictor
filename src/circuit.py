@@ -81,7 +81,7 @@ def run_series(feed, stages, prop_lookup=None, assay_func=None,
             over, under = classify_stream(
                 current, diameter_cm=s.get("diameter_cm", 15.0),
                 pressure_kpa=s.get("pressure_kpa", 100.0), grid=grid,
-                apply_p80_func=apply_p80_func)
+                apply_p80_func=apply_p80_func, pct_solids=s.get("pct_solids", 50.0))
             cyclone_outputs[stage_name] = {"overflow": over, "underflow": under}
             if s.get("continue_flux", "overflow") == "underflow":
                 current = under
