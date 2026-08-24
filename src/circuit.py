@@ -28,7 +28,9 @@ def apply_unit(stream, unit, conc_name="concentre", tail_name="rejet",  prop_loo
 
     elif unit.unit_type == "magnetic":
         thr, sharp = magnetic_cutpoint(unit)
-        reco = magnetic_recovery(stream, thr, sharp, mineral_props=prop_lookup)
+        reco = magnetic_recovery(stream, thr, sharp, mineral_props=prop_lookup,
+                                 pct_solids=unit.settings.get("pct_solids", 35.0),
+                                 mode=unit.settings.get("mode", "WHIMS_wet"))
         return separate(stream, reco, conc_name=conc_name, tail_name=tail_name,
                         assay_func=assay_func)
 

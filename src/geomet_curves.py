@@ -69,7 +69,9 @@ def _apply_one(feed, unit_type, settings, prop_lookup=None, assay_func=None):
         return separate(feed, reco, gold_recovery=au, assay_func=assay_func)
     elif unit_type == "magnetic":
         thr, sharp = magnetic_cutpoint(unit)
-        reco = magnetic_recovery(feed, thr, sharp, mineral_props=prop_lookup)
+        reco = magnetic_recovery(feed, thr, sharp, mineral_props=prop_lookup,
+                                 pct_solids=unit.settings.get("pct_solids", 35.0),
+                                 mode=unit.settings.get("mode", "WHIMS_wet"))
         return separate(feed, reco, assay_func=assay_func)
     else:
         reco = flotation_recovery(feed, unit, mineral_props=prop_lookup)

@@ -46,6 +46,7 @@ SEPARATION_SPECS = {
                  "default": "WHIMS_wet"},
         "field_tesla": {"min": 0.05, "max": 2.0, "default": 1.0},
         "drum_speed_rpm": {"min": 10.0, "max": 120.0, "default": 60.0},
+        "pct_solids": {"min": 10.0, "max": 50.0, "default": 35.0},
     },
     "flotation": {
         "collector_type": {"choices": ["xanthate_SIBX", "PAX", "amine_inverse"],

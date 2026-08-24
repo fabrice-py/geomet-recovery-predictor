@@ -33,8 +33,22 @@ def magnetic_capture(susceptibility, threshold, sharpness):
     """
     return 1.0 / (1.0 + math.exp(-sharpness * (susceptibility - threshold)))
 
+def solids_effect_magnetic(pct_solids, mode, optimum=35.0):
+    """Effet du % solides sur le magnetique HUMIDE (phenomenologique, leger), car une pulpe
+    dense entraine mecaniquement la gangue non magnetique dans le concentre :
+    - trop dense (> optimum) : entrainement -> recuperation parasite des non-magnetiques.
+    - trop dilue : effet faible (surtout un probleme de debit, non modelise ici).
+    Ne s'applique qu'en voie humide (mode terminant par 'wet') : en voie seche, pas de pulpe.
+    Retour : entrainment (recuperation parasite ajoutee, forte pour les peu-magnetiques)."""
+    if not mode.endswith("wet"):
+        return 0.0
+    ecart = pct_solids - optimum
+    if ecart > 0:
+        return min(0.12, 0.0035 * ecart)
+    return 0.0
 
-def magnetic_recovery(stream, threshold, sharpness, mineral_props=None):
+def magnetic_recovery(stream, threshold, sharpness, mineral_props=None,
+                      pct_solids=35.0, mode="WHIMS_wet"):
     """
     Récupération par minéral au concentré magnétique, car c'est le produit qu'attend
     separate() : ainsi on lit la catégorie magnétique de chaque minéral, on la traduit
@@ -61,8 +75,17 @@ def magnetic_recovery(stream, threshold, sharpness, mineral_props=None):
         if chi_eff is None:
             chi_diamag = SUSCEPTIBILITY["diamagnetique"]
             chi_eff = lib * chi + (1 - lib) * chi_diamag
-        recovery[m] = round(magnetic_capture(chi_eff, threshold, sharpness), 4)
-    return recovery
+        recovery[m] = magnetic_capture(chi_eff, threshold, sharpness)
+
+    # Entrainement mecanique (% solides eleve, voie humide) : une pulpe dense emporte la gangue
+    # non magnetique dans le concentre, car elle n'est pas assez dispersee : ainsi on ajoute une
+    # recuperation parasite forte pour les mineraux peu magnetiques (deja peu captes).
+    entrainment = solids_effect_magnetic(pct_solids, mode)
+    if entrainment > 0:
+        for m in recovery:
+            recovery[m] = recovery[m] + entrainment * (1.0 - recovery[m])
+
+    return {m: round(v, 4) for m, v in recovery.items()}
 
 
 def magnetic_cutpoint(unit):
