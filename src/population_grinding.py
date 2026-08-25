@@ -148,7 +148,7 @@ def grinding_step(psd, sizes, distribution, delta):
             continue
         redistributed = 0.0
         for k in range(i + 1, n):
-            frac = breakage_fraction(k, i, sizes)
+            frac = breakage_fraction_ball(k, i, sizes, distribution)
             out[k] += broken * frac
             redistributed += broken * frac
         # Residu (fragments sous la derniere classe) : absorbe par la classe la plus fine, car
@@ -223,3 +223,59 @@ def grind_psd_energy_based(psd, sizes, grid, distribution, p80_bond,
     for _ in range(n_steps):
         current = grinding_step(current, sizes, distribution, delta)
     return current, round(p80_from_psd(grid, current), 1), n_steps
+
+# --- Piste B (option 1) : forme des fragments dependante des boulets qui cassent chaque classe ---
+
+# Modulation de phi (ponderation fines/gros de B) selon la taille du boulet effectif :
+# gros boulet -> phi BAS (impact violent, gros fragments) ; petit boulet -> phi HAUT (attrition,
+# plus de fines). Bornes phenomenologiques a caler.
+PHI_MIN = 0.30     # gros boulets : peu de poids au terme fines -> fragments plus grossiers.
+PHI_MAX = 0.70     # petits boulets : plus de fines.
+BALL_REF_MIN = 15.0    # taille de boulet ou phi = PHI_MAX (petit boulet).
+BALL_REF_MAX = 80.0    # taille de boulet ou phi = PHI_MIN (gros boulet).
+
+
+def effective_ball_size(x_um, distribution):
+    """Taille de boulet EFFECTIVE qui casse une particule de taille x_um, car dans une charge
+    distribuee ce sont les boulets bien adaptes a x qui la cassent majoritairement : ainsi on
+    moyenne les tailles de boulets ponderees par leur contribution a la selection de x.
+    taille_eff = somme_d [ contribution(d) * d ] / somme_d [ contribution(d) ]."""
+    number_fracs = mass_to_number_fractions(distribution)
+    contributions = {d: n * selection_by_ball(x_um, d) for d, n in number_fracs.items()}
+    total = sum(contributions.values())
+    if total <= 1e-12:
+        # Aucun boulet ne casse cette taille : renvoie la taille moyenne de la charge.
+        return sum(number_fracs.keys()) / len(number_fracs)
+    return sum(c * d for d, c in contributions.items()) / total
+
+
+def phi_for_ball(ball_size_mm):
+    """phi (ponderation fines/gros de B) selon la taille de boulet effectif, car un gros boulet
+    fracture en gros fragments (phi bas) et un petit boulet produit plus de fines (phi haut) :
+    interpolation lineaire entre PHI_MAX (petit boulet) et PHI_MIN (gros boulet)."""
+    frac = (ball_size_mm - BALL_REF_MIN) / (BALL_REF_MAX - BALL_REF_MIN)
+    frac = max(0.0, min(1.0, frac))
+    return PHI_MAX - frac * (PHI_MAX - PHI_MIN)
+
+
+def breakage_cumulative_ball(x_i, x_j, phi):
+    """Fonction de broyage cumulee avec un phi VARIABLE (dependant du boulet effectif), car la
+    forme des fragments depend de la taille du boulet qui casse : ainsi B n'est plus normalisee."""
+    if x_i >= x_j:
+        return 1.0
+    ratio = x_i / x_j
+    return phi * ratio ** BRK_GAMMA + (1.0 - phi) * ratio ** BRK_BETA
+
+
+def breakage_fraction_ball(i, j, sizes, distribution):
+    """Fraction de masse de la classe j qui atterrit dans la classe i, avec la forme des
+    fragments DEPENDANTE des boulets qui cassent la classe j : ainsi la distribution de boulets
+    faconne la FORME de la PSD, pas seulement le P80."""
+    if i <= j:
+        return 0.0
+    x_j = sizes[j]
+    ball_eff = effective_ball_size(x_j, distribution)   # quel boulet casse la classe j
+    phi = phi_for_ball(ball_eff)
+    haut = sizes[i - 1] if i - 1 >= 0 else sizes[0]
+    bas = sizes[i]
+    return breakage_cumulative_ball(haut, x_j, phi) - breakage_cumulative_ball(bas, x_j, phi)
