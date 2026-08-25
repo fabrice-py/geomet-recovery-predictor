@@ -47,3 +47,35 @@ def mass_to_number_fractions(distribution):
     counts = {d: p / ball_mass_g(d) for d, p in norm.items()}   # nombre relatif par classe
     total = sum(counts.values())
     return {d: c / total for d, c in counts.items()}
+
+# --- Brique 2 : fonction de selection S (quel boulet casse quelle particule) ---
+
+# Parametres phenomenologiques du modele de selection (Austin), NON calibres sur essais.
+# Documentes comme tels (posture honnete) ; a caler sur donnees reelles plus tard.
+SEL_ALPHA = 1.0        # exposant de taille : la selection croit ~ x^alpha pour les fines.
+SEL_LAMBDA = 3.0       # raideur du plafonnement pour les grosses particules.
+SEL_K_MU = 0.05        # taille critique de particule / taille de boulet (mm) : un boulet casse
+                       # bien jusqu'a ~1/20 de son diametre. mu(um) = SEL_K_MU * d(mm) * 1000.
+
+
+def selection_by_ball(x_um, ball_mm):
+    """Vitesse de cassure (selection) d'une particule de taille x_um par un boulet de diametre
+    ball_mm, car chaque boulet casse efficacement une GAMME de particules :
+    - la selection croit avec la taille de particule (x^alpha), les grosses etant plus fragiles ;
+    - mais PLAFONNE puis chute quand la particule devient trop grosse pour le boulet (elle
+      glisse au lieu d'etre saisie) : facteur Q = 1/(1 + (x/mu)^Lambda), ou mu ~ taille du boulet.
+    Ainsi un GROS boulet a son maximum de selection sur de GROSSES particules, un petit sur les
+    fines. Valeur relative (l'echelle absolue sera calee par l'energie de Bond)."""
+    mu_um = SEL_K_MU * ball_mm * 1000.0            # taille critique de particule (um)
+    croissance = x_um ** SEL_ALPHA                 # croit avec la taille
+    plafond = 1.0 / (1.0 + (x_um / mu_um) ** SEL_LAMBDA)   # chute au-dela de mu
+    return croissance * plafond
+
+
+def selection_total(x_um, distribution):
+    """Selection TOTALE d'une particule de taille x_um par la charge de boulets DISTRIBUEE, car
+    chaque taille de boulet contribue selon son EFFECTIF (nombre) : ainsi on somme les
+    selections de chaque classe de boulet, ponderees par leur fraction en nombre.
+    S_total(x) = somme_d [ n(d) * S(x, d) ]."""
+    number_fracs = mass_to_number_fractions(distribution)
+    return sum(n * selection_by_ball(x_um, d) for d, n in number_fracs.items())
