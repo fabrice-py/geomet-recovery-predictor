@@ -172,12 +172,16 @@ def apply_p80(stream, p80, grid=None):
     mais avec le P80 effectif. Modifie le flux en place.
     """
 
-    p80 = float(np.clip(p80, 10, 300))
+    # Borne le P80 a la plage de la grille (la borne haute suit la grille etendue), car on ne
+    # peut pas representer un P80 plus grossier que la plus grosse classe : ainsi apply_p80
+    # accepte desormais des alimentations grossieres (jusqu'a la limite de la grille).
+    grid_max = max(grid)
+    p80 = float(np.clip(p80, 10, grid_max))
     # La PSD est la verite : on la reconstruit pour le P80 vise (Rosin-Rammler), puis on
     # redecoule le P80 de la PSD, car changer la finesse revient a changer la distribution.
     stream.psd_curve = make_psd_rosin_rammler(grid, p80, m=1.0)
     p80_eff = p80_from_psd(grid, stream.psd_curve)
-    fineness = 1 - (p80_eff - 45) / (300 - 45)
+    fineness = 1 - (p80_eff - 45) / (grid_max - 45)
     fineness = float(np.clip(fineness, 0.0, 1.0))
     stream.p80_um = round(p80_eff, 1)
 

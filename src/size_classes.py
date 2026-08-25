@@ -11,7 +11,8 @@ import numpy as np
 
 # Grille par defaut (serie de tamis en um, decroissante), car il faut un point de depart :
 # ainsi le flowsheet a une granulometrie commune que l'utilisateur pourra redefinir.
-DEFAULT_GRID_UM = [300.0, 212.0, 150.0, 106.0, 75.0, 53.0, 38.0, 25.0, 15.0]
+DEFAULT_GRID_UM = [3350.0, 2360.0, 1700.0, 1180.0, 850.0, 600.0, 425.0,
+                   300.0, 212.0, 150.0, 106.0, 75.0, 53.0, 38.0, 25.0, 15.0]
 
 
 def class_labels(grid):
