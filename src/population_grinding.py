@@ -114,3 +114,46 @@ def breakage_fraction(i, j, sizes):
     haut = sizes[i - 1] if i - 1 >= 0 else sizes[0]
     bas = sizes[i]
     return breakage_cumulative(haut, x_j) - breakage_cumulative(bas, x_j)
+
+# --- Brique 4a : un pas de bilan de population (la matrice S+B transforme la PSD) ---
+
+
+def grinding_step(psd, sizes, distribution, delta):
+    """Applique UN pas de broyage a une PSD (bilan de population d'Austin), car le broyage
+    transfere de la masse des classes grossieres vers les fines selon S (qui casse) et B (ou
+    vont les fragments) :
+        p_i(sortie) = p_i - S_i*p_i*delta + somme_{j<i} b_ij*S_j*p_j*delta
+    - psd : liste des fractions massiques par classe (somme 1), index 0 = la plus grossiere.
+    - sizes : tailles representatives des classes (decroissantes).
+    - distribution : la charge de boulets (pour S total).
+    - delta : intensite du pas (calee sur Bond en 4b). Doit rester petit pour la stabilite.
+    Conservation de masse : ce qui quitte une classe est integralement redistribue dans les
+    classes plus fines ; la DERNIERE classe absorbe tout le residu (fines sous la grille)."""
+    n = len(psd)
+    # Selection de chaque classe (bornée pour la stabilite : S*delta <= 1).
+        # Selection normalisee : on ramene la selection maximale a 1, car les valeurs brutes de
+    # selection_total sont en unites arbitraires ; ainsi delta controle directement l'intensite
+    # du pas (fraction de la classe la plus 'cassable' qui casse a chaque pas).
+    raw = [selection_total(sizes[i], distribution) for i in range(n)]
+    s_max = max(raw) if raw else 1.0
+    S = [min(1.0, (raw[i] / s_max) * delta) for i in range(n)]
+
+    out = [0.0] * n
+    for i in range(n):
+        # Masse qui RESTE dans la classe i (non cassee).
+        out[i] += psd[i] * (1.0 - S[i])
+        # Masse qui QUITTE la classe i (cassee) et se redistribue dans les classes plus fines.
+        broken = psd[i] * S[i]
+        if broken <= 0:
+            continue
+        redistributed = 0.0
+        for k in range(i + 1, n):
+            frac = breakage_fraction(k, i, sizes)
+            out[k] += broken * frac
+            redistributed += broken * frac
+        # Residu (fragments sous la derniere classe) : absorbe par la classe la plus fine, car
+        # la grille est finie et rien ne doit se perdre : ainsi la masse est conservee.
+        residue = broken - redistributed
+        if residue > 0:
+            out[n - 1] += residue
+    return out
