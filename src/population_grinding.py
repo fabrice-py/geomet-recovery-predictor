@@ -157,3 +157,69 @@ def grinding_step(psd, sizes, distribution, delta):
         if residue > 0:
             out[n - 1] += residue
     return out
+
+# --- Brique 4b : hybridation avec Bond (iterer jusqu'au P80 cible de Bond) ---
+
+
+def grind_psd_to_target(psd, sizes, grid, distribution, p80_target,
+                        delta=0.05, max_steps=500):
+    """Broie une PSD par bilan de population jusqu'a atteindre le P80 cible fixe par Bond, car
+    Bond cale l'INTENSITE globale (energie -> P80) tandis que la matrice S+B donne la FORME :
+    ainsi on applique des pas de broyage jusqu'a ce que le P80 courant atteigne la cible.
+    - p80_target : le P80 vise, fourni par la loi de Bond (calibree).
+    - delta : intensite de chaque pas (petit pour la finesse du calage).
+    - max_steps : garde-fou contre une boucle infinie.
+    Retour : (psd_broyee, p80_atteint, n_steps). La masse est conservee a chaque pas."""
+    from size_classes import p80_from_psd
+    current = list(psd)
+    p80_current = p80_from_psd(grid, current)
+    # Si la cible est deja atteinte ou plus grossiere, on ne broie pas (un broyeur ne grossit pas).
+    if p80_target >= p80_current:
+        return current, p80_current, 0
+    steps = 0
+    while p80_current > p80_target and steps < max_steps:
+        current = grinding_step(current, sizes, distribution, delta)
+        p80_current = p80_from_psd(grid, current)
+        steps += 1
+    return current, round(p80_current, 1), steps
+
+# --- Etape piste A : calage sur l'ENERGIE (nombre de pas), la charge module le P80 atteint ---
+
+
+def calibrate_steps_for_bond(psd, sizes, grid, p80_bond, reference_distribution=None,
+                             delta=0.05, max_steps=500):
+    """Calibre le NOMBRE DE PAS pour qu'une charge de REFERENCE atteigne le P80 de Bond, car
+    l'energie de Bond doit correspondre a une quantite de broyage : ainsi on mesure combien de
+    pas la charge de reference met pour atteindre le P80 de Bond. Ce nombre de pas represente
+    l'ENERGIE appliquee ; une AUTRE charge, avec ce meme nombre de pas, atteindra un P80
+    different selon son efficacite."""
+    from size_classes import p80_from_psd
+    if reference_distribution is None:
+        reference_distribution = DEFAULT_BALL_DISTRIBUTION
+    current = list(psd)
+    p80_current = p80_from_psd(grid, current)
+    if p80_bond >= p80_current:
+        return 0
+    steps = 0
+    while p80_current > p80_bond and steps < max_steps:
+        current = grinding_step(current, sizes, reference_distribution, delta)
+        p80_current = p80_from_psd(grid, current)
+        steps += 1
+    return steps
+
+
+def grind_psd_energy_based(psd, sizes, grid, distribution, p80_bond,
+                           reference_distribution=None, delta=0.05):
+    """Broie une PSD en appliquant l'ENERGIE de Bond (traduite en nombre de pas cale sur une
+    charge de reference), car la charge REELLE module alors l'efficacite : ainsi une charge bien
+    adaptee atteint un P80 plus fin que Bond, une charge mal adaptee un P80 plus grossier.
+    Bond fixe l'energie de reference ; la distribution de boulets module le resultat.
+    Retour : (psd_broyee, p80_atteint, n_steps)."""
+    from size_classes import p80_from_psd
+    # 1) Calibrer le nombre de pas sur une charge de reference (= l'energie de Bond).
+    n_steps = calibrate_steps_for_bond(psd, sizes, grid, p80_bond, reference_distribution, delta)
+    # 2) Appliquer ce meme nombre de pas avec la charge REELLE.
+    current = list(psd)
+    for _ in range(n_steps):
+        current = grinding_step(current, sizes, distribution, delta)
+    return current, round(p80_from_psd(grid, current), 1), n_steps
