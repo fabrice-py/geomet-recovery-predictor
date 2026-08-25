@@ -59,7 +59,8 @@ def bond_product_p80(f80, work_index, energy_kwht):
 
 
 def grind_stream(stream, work_index, energy_kwht, grid=None, apply_p80_func=None,
-                 pct_solids=75.0, mode="humide", filling_pct=37.0, comblement_u=1.0):
+                 pct_solids=75.0, mode="humide", filling_pct=37.0, comblement_u=1.0,
+                 modele="bond", ball_distribution=None):
     """
     Applique un broyage a un flux (en place), car le broyeur transforme la PSD et la
     liberation sans toucher a la masse ni a la mineralogie : ainsi on calcule le P80 de
@@ -69,12 +70,12 @@ def grind_stream(stream, work_index, energy_kwht, grid=None, apply_p80_func=None
     """
     if grid is None:
         grid = DEFAULT_GRID_UM
-    # F80 d'entree : lu depuis la PSD si presente, sinon depuis p80_um.
+        # F80 d'entree : lu depuis la PSD si presente, sinon depuis p80_um.
     if stream.psd_curve is not None:
         f80 = p80_from_psd(grid, stream.psd_curve)
     else:
         f80 = stream.p80_um
-        # Efficacite globale du broyage = produit de TROIS facteurs independants, car chacun agit
+    # Efficacite globale du broyage = produit de TROIS facteurs independants, car chacun agit
     # sur un maillon distinct de la chaine energetique (pas de doublon) :
     #   - Jb (remplissage en boulets)  -> energie DISPONIBLE (nombre/violence des impacts) ;
     #   - U  (comblement interstitiel) -> TRANSFERT de cette energie au minerai ;
@@ -84,12 +85,33 @@ def grind_stream(stream, work_index, energy_kwht, grid=None, apply_p80_func=None
            * filling_effect_grinding(filling_pct)
            * interstitial_effect_grinding(comblement_u))
     energy_effective = energy_kwht * eff
-    # P80 de sortie par la loi de Bond, avec l'energie effective.
-    p80_out = bond_product_p80(f80, work_index, energy_effective)
-    # Reconstruction PSD + liberation via apply_p80 (qui refait PSD et cascade de liberation).
+    # P80 de reference par la loi de Bond (energie effective) : c'est l'ancre energetique.
+    p80_bond = bond_product_p80(f80, work_index, energy_effective)
+
+    if modele == "population" and stream.psd_curve is not None:
+        # Modele par bilan de population : Bond cale l'energie (via p80_bond), la DISTRIBUTION
+        # DE BOULETS faconne la forme de la PSD. Ainsi deux charges a energie egale donnent des
+        # granulometries differentes (efficacite ET forme).
+        from population_grinding import grind_psd_energy_based, DEFAULT_BALL_DISTRIBUTION
+        from size_classes import class_representative_sizes
+        dist = ball_distribution if ball_distribution else DEFAULT_BALL_DISTRIBUTION
+        sizes = class_representative_sizes(grid)
+        psd_out, p80_pop, _ = grind_psd_energy_based(
+            stream.psd_curve, sizes, grid, dist, p80_bond)
+        stream.psd_curve = psd_out
+        stream.p80_um = p80_pop
+        # Recalcule la liberation sur le P80 obtenu, sans reconstruire la PSD (deja faconnee).
+        if apply_p80_func is not None:
+            saved = list(stream.psd_curve)
+            apply_p80_func(stream, p80_pop, grid=grid)
+            stream.psd_curve = saved   # on re-impose la PSD du bilan de population
+            stream.p80_um = p80_pop
+        return stream
+
+    # Modele Bond (simple) : P80 -> PSD Rosin-Rammler (comportement de reference).
     if apply_p80_func is not None:
-        apply_p80_func(stream, p80_out, grid=grid)
+        apply_p80_func(stream, p80_bond, grid=grid)
     else:
-        stream.psd_curve = make_psd_rosin_rammler(grid, p80_out, m=1.0)
+        stream.psd_curve = make_psd_rosin_rammler(grid, p80_bond, m=1.0)
         stream.p80_um = round(p80_from_psd(grid, stream.psd_curve), 1)
     return stream
