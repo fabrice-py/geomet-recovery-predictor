@@ -335,6 +335,16 @@ TRANSLATIONS = {
     "flowsheet_diagram": {"fr": "Schema du circuit", "en": "Flowsheet diagram"},
     "feed_node_label": {"fr": "ALIMENTATION", "en": "FEED"},
     "final_node_label": {"fr": "Sortie", "en": "Output"},
+    "ball_dist_hint": {"fr": "Distribution des boulets (taille et proportion). La charge faconne la granulometrie de sortie.",
+                       "en": "Ball size distribution (size and proportion). The charge shapes the output PSD."},
+    "ball_size_col": {"fr": "Taille (mm)", "en": "Size (mm)"},
+    "ball_prop_col": {"fr": "Proportion", "en": "Proportion"},
+
+    "col_stage_name": {"fr": "Nom de l'étage", "en": "Stage name"},
+    "col_collector_gpt": {"fr": "Collecteur (g/t)", "en": "Collector (g/t)"},
+    "col_pulp_ph": {"fr": "pH de pulpe", "en": "Pulp pH"},
+    "col_depressed": {"fr": "Mineraux déprimés", "en": "Depressed minerals"},
+    "col_activated": {"fr": "Mineraux activés", "en": "Activated minerals"},
 }
 # ============================================================================
 # Libelles des parametres machine, car les cles techniques

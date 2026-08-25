@@ -60,9 +60,9 @@ MAGNETIC_CATEGORIES = ["ferromagnetique", "paramagnetique",
 
 CIRCUIT_TEMPLATES = {
     "Vierge (2 etages)": pd.DataFrame([
-        {"name": "etage_1", "collector_gpt": 100.0, "pulp_ph": 9.0,
+        {"name": "Etage 1", "collector_gpt": 100.0, "pulp_ph": 9.0,
          "depressed_minerals": "", "activated_minerals": ""},
-        {"name": "etage_2", "collector_gpt": 100.0, "pulp_ph": 10.0,
+        {"name": "Etage 2", "collector_gpt": 100.0, "pulp_ph": 10.0,
          "depressed_minerals": "", "activated_minerals": ""},
     ]),
     "Differentiel Cu -> Zn": pd.DataFrame([
@@ -840,7 +840,14 @@ if is_circuit:
     st.caption(t("base_minerals", lang) + ", ".join(MINERALS.keys()))
     circuit_editor = st.data_editor(
         CIRCUIT_TEMPLATES[template_name], num_rows="dynamic",
-        use_container_width=True, key="circuit_editor")
+        use_container_width=True, key="circuit_editor",
+        column_config={
+            "name": st.column_config.TextColumn(t("col_stage_name", lang)),
+            "collector_gpt": st.column_config.NumberColumn(t("col_collector_gpt", lang)),
+            "pulp_ph": st.column_config.NumberColumn(t("col_pulp_ph", lang)),
+            "depressed_minerals": st.column_config.TextColumn(t("col_depressed", lang)),
+            "activated_minerals": st.column_config.TextColumn(t("col_activated", lang)),
+        })
 # ---- Composition d'un circuit multi-voies (etages heterogenes) ----
 multi_stages = []
 if is_multi:
@@ -852,7 +859,7 @@ if is_multi:
 
     for i in range(int(n_stages)):
         with st.expander(f"{t('stage_n', lang)} {i+1}", expanded=(i == 0)):
-            name = st.text_input(t("stage_name", lang), value=f"etage_{i+1}",
+            name = st.text_input(t("stage_name", lang), value=f"Etage {i+1}",
                                  key=f"ms_name_{i}")
             voie_disp = [route_label(v, lang) for v in voies_multi]
             picked = st.selectbox(t("stage_route", lang), options=voie_disp, key=f"ms_route_{i}")
@@ -878,6 +885,37 @@ if is_multi:
                     settings_i[param] = st.slider(
                         label, float(rule["min"]), float(rule["max"]),
                         float(rule["default"]), key=f"ms_{i}_{param}")
+            # Distribution de boulets : tableau dedie, affiche seulement pour un broyeur en mode
+            # "population", car la charge de boulets faconne la PSD dans ce modele : ainsi
+            # l'utilisateur compose ses tailles de boulets et leurs proportions.
+            if (unit_type_i == "ball_mill"
+                    and settings_i.get("modele_broyage") == "population"):
+                from population_grinding import DEFAULT_BALL_DISTRIBUTION
+                st.caption(t("ball_dist_hint", lang))
+                default_balls = pd.DataFrame(
+                    [{"taille_mm": d, "proportion": p}
+                     for d, p in DEFAULT_BALL_DISTRIBUTION.items()])
+                balls_edited = st.data_editor(
+                    default_balls, num_rows="dynamic", use_container_width=True,
+                    key=f"ms_{i}_balls",
+                    column_config={
+                        "taille_mm": st.column_config.NumberColumn(t("ball_size_col", lang),
+                                                                   min_value=1.0, max_value=150.0),
+                        "proportion": st.column_config.NumberColumn(t("ball_prop_col", lang),
+                                                                    min_value=0.0),
+                    })
+                # Parse le tableau en dict {taille: proportion}, en ignorant les lignes vides.
+                dist = {}
+                for _, row in balls_edited.iterrows():
+                    try:
+                        taille = float(row["taille_mm"])
+                        prop = float(row["proportion"])
+                    except (ValueError, TypeError):
+                        continue
+                    if taille > 0 and prop > 0:
+                        dist[taille] = prop
+                if dist:
+                    settings_i["ball_distribution"] = dist
             multi_stages.append({"name": name, "unit_type": unit_type_i, "settings": settings_i, "metal": metal_i})
 # ---- Retours (charge circulante) ----
     st.subheader(t("returns_section", lang))
@@ -961,7 +999,6 @@ def flowsheet_to_dot(flowsheet, lang):
     return "\n".join(out)
 
 def apply_meb_liberation(feed):
-    st.warning(f"DEBUG associations feed : {feed.liberation.associations}")
     """Applique la liberation mesuree au MEB, car elle est plus fiable que celle derivee du
     P80 : ainsi on ECRASE, mineral par mineral, le degre de liberation pour les mineraux
     fournis (les autres gardent la valeur derivee). L'or multi-modes n'est pas touche.
