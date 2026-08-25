@@ -157,7 +157,9 @@ def apply_node(unit_type, settings, feed_stream, prop_lookup=None, assay_func=No
                                           pct_solids=settings.get("pct_solids", 75.0),
                      mode=settings.get("mode", "humide"),
                      filling_pct=settings.get("filling_pct", 37.0),
-                     comblement_u=settings.get("comblement_u", 1.0))
+                     comblement_u=settings.get("comblement_u", 1.0),
+                     modele=settings.get("modele_broyage", "bond"),
+                     ball_distribution=settings.get("ball_distribution"))
         return {"out": ground}
     
     if unit_type == "hydrocyclone":

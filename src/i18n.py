@@ -371,6 +371,7 @@ PARAM_LABELS = {
     "pct_solids": {"fr": "% solides (densite de pulpe)", "en": "% solids (pulp density)"},  
     "filling_pct": {"fr": "Taux de remplissage en boulets Jb (%)", "en": "Ball filling Jb (%)"},
     "comblement_u": {"fr": "Comblement interstitiel U", "en": "Interstitial filling U"},
+    "modele_broyage": {"fr": "Modele de broyage", "en": "Grinding model"},
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).
@@ -387,6 +388,8 @@ OPTION_LABELS = {
     "underflow": {"fr": "Sousverse (grossiers)", "en": "Underflow (coarse)"},
     "humide": {"fr": "Voie humide", "en": "Wet"},
     "sec": {"fr": "Voie seche", "en": "Dry"},
+    "bond": {"fr": "Loi de Bond", "en": "Bond's law"},
+    "population": {"fr": "Distribution de boulets", "en": "Ball size distribution"},
 }
 
 ROUTE_LABELS = {
