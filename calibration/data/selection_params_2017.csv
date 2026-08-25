@@ -1,0 +1,19 @@
+# Jeu de donnees de calibration - parametres de la fonction de selection (Austin)
+# SOURCE : Petrakis E., Komnitsas K. (2017).
+#   "Improved Modeling of the Grinding Process through the Combined Use of Matrix
+#    and Population Balance Models." Minerals 7(5):67.
+#   https://doi.org/10.3390/min7050067  (Open Access, CC-BY)
+# Table 7 : parametres estimes de la fonction de selection S_i = alphaT * x^alpha * Q_i,
+#   avec Q_i = 1 / (1 + (x/mu)^Lambda), pour marbre et quartz selon le comblement U.
+# Conditions : broyeur laboratoire, boulets d = 25.4 mm, voie SECHE.
+# Le modele de reference est S_i = alphaT * x^alpha / (1 + (x/mu)^Lambda).
+# Correspondance avec le simulateur : alpha <-> SEL_ALPHA, Lambda <-> SEL_LAMBDA,
+#   mu <-> SEL_K_MU * d (taille critique). alphaT porte l'echelle temporelle (min^-1).
+# Colonnes : materiau, U_pct, alphaT_min1, alpha, mu_mm, Lambda, boulet_mm
+materiau,U_pct,alphaT_min1,alpha,mu_mm,Lambda,boulet_mm
+marbre,50,0.87,0.90,3.72,3.36,25.4
+marbre,100,0.46,0.92,3.69,3.35,25.4
+marbre,150,0.32,0.92,3.69,3.35,25.4
+quartz,50,0.46,1.13,2.11,3.15,25.4
+quartz,100,0.23,1.15,2.11,3.15,25.4
+quartz,150,0.15,1.15,2.11,3.15,25.4
