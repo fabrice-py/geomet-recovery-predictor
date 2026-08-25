@@ -79,3 +79,38 @@ def selection_total(x_um, distribution):
     S_total(x) = somme_d [ n(d) * S(x, d) ]."""
     number_fracs = mass_to_number_fractions(distribution)
     return sum(n * selection_by_ball(x_um, d) for d, n in number_fracs.items())
+
+# --- Brique 3 : fonction de broyage B (comment les fragments se redistribuent) ---
+
+# Parametres phenomenologiques de la fonction de broyage (Austin), NON calibres (a caler).
+BRK_PHI = 0.5      # ponderation entre le terme "fines" et le terme "gros fragments".
+BRK_GAMMA = 0.6    # exposant du terme fines : plus il est bas, plus on produit de fines.
+BRK_BETA = 4.0     # exposant du terme gros fragments : chute rapide pour les gros morceaux.
+
+
+def breakage_cumulative(x_i, x_j):
+    """Fonction de broyage CUMULEE B(x_i, x_j) : fraction de la masse issue de la cassure d'une
+    particule de taille x_j qui se retrouve PLUS FINE que x_i, car une cassure produit un spectre
+    de fragments (des fines et quelques gros morceaux) : ainsi B decrit la forme de ce spectre.
+    Forme d'Austin a deux termes (normalisee : depend du rapport x_i/x_j) :
+        B = phi*(x_i/x_j)^gamma + (1-phi)*(x_i/x_j)^beta
+    B(x_i>=x_j) = 1 (toute la masse est plus fine que la particule mere), B croit quand x_i baisse."""
+    if x_i >= x_j:
+        return 1.0
+    ratio = x_i / x_j
+    return BRK_PHI * ratio ** BRK_GAMMA + (1.0 - BRK_PHI) * ratio ** BRK_BETA
+
+
+def breakage_fraction(i, j, sizes):
+    """Fraction de masse issue de la cassure d'une particule de classe j qui atterrit DANS la
+    classe i (i plus fine que j), car le bilan de population raisonne classe par classe : ainsi
+    on prend la difference des B cumulees entre les bornes de la classe i.
+    sizes : tailles representatives des classes (decroissantes, sizes[0] = la plus grossiere).
+    b(i,j) = B(borne_haute_i, x_j) - B(borne_basse_i, x_j)."""
+    if i <= j:
+        return 0.0   # une cassure ne produit que du PLUS FIN (i > j en indice = plus fin)
+    # Bornes de la classe i : entre sizes[i] et sizes[i-1] (approximation par les tailles repr.).
+    x_j = sizes[j]
+    haut = sizes[i - 1] if i - 1 >= 0 else sizes[0]
+    bas = sizes[i]
+    return breakage_cumulative(haut, x_j) - breakage_cumulative(bas, x_j)
