@@ -249,10 +249,10 @@ TRANSLATIONS = {
 
     # ----- Avertissement variation negligeable -----
     "flat_warning": {
-        "fr": "Le metal suivi ({el}) ne reagit quasiment pas au parametre '{p}' : "
-              "recuperation varie de {ar:.2f} pt, teneur de {ag:.2f} pt. Ce n'est "
-              "probablement pas le bon levier pour ce metal. Essayez un autre metal "
-              "d'interet, ou un parametre qui mobilise ce metal. La courbe ci-dessous "
+        "fr": "Le métal suivi ({el}) ne reagit quasiment pas au parametre '{p}' : "
+              "récupération varie de {ar:.2f} pt, teneur de {ag:.2f} pt. Ce n'est "
+              "probablement pas le bon levier pour ce métal. Essayez un autre métal "
+              "d'intéret, ou un parametre qui mobilise ce métal. La courbe ci-dessous "
               "reste affichee a titre indicatif.",
         "en": "The tracked metal ({el}) barely responds to parameter '{p}': recovery "
               "varies by {ar:.2f} pt, grade by {ag:.2f} pt. This is probably not the right "
@@ -260,22 +260,22 @@ TRANSLATIONS = {
               "mobilises it. The curve below is shown for reference only."},
 
     # ----- Cinetique -----
-    "kinetics_title": {"fr": "Cinetique de flottation", "en": "Flotation kinetics"},
+    "kinetics_title": {"fr": "Cinétique de flottation", "en": "Flotation kinetics"},
     "kinetics_caption": {
-        "fr": "Recuperation de chaque mineral en fonction du temps de residence, a reglages "
-              "fixes. On voit la selectivite s'installer dans le temps : les mineraux "
+        "fr": "Récupération de chaque minéral en fonction du temps de résidence, a reglages "
+              "fixes. On voit la sélectivite s'installer dans le temps : les minéraux "
               "flottables montent vite vers leur plateau.",
         "en": "Recovery of each mineral versus residence time, at fixed settings. "
               "Selectivity builds up over time: floatable minerals rise quickly to their "
               "plateau."},
-    "trace_kinetics": {"fr": "Tracer la cinetique", "en": "Plot kinetics"},
-    "kinetics_plot_title": {"fr": "Cinetique de flottation par mineral",
+    "trace_kinetics": {"fr": "Tracer la cinétique", "en": "Plot kinetics"},
+    "kinetics_plot_title": {"fr": "Cinétique de flottation par minéral",
                             "en": "Flotation kinetics per mineral"},
-    "time_axis": {"fr": "Temps de residence (min)", "en": "Residence time (min)"},
-    "recovery_pct": {"fr": "Recuperation (%)", "en": "Recovery (%)"},
+    "time_axis": {"fr": "Temps de résidence (min)", "en": "Residence time (min)"},
+    "recovery_pct": {"fr": "Récupération (%)", "en": "Recovery (%)"},
     "kinetics_foot": {
-        "fr": "Le temps de residence actuel du reglage est {t:.1f} min. Au-dela du plateau "
-              "d'un mineral, prolonger ne fait qu'entrainer de la gangue.",
+        "fr": "Le temps de résidence actuel du réglage est {t:.1f} min. Au-dela du plateau "
+              "d'un minéral, prolonger ne fait qu'entrainer de la gangue.",
         "en": "The current residence-time setting is {t:.1f} min. Beyond a mineral's "
               "plateau, extending time only entrains gangue."},
 
@@ -286,13 +286,13 @@ TRANSLATIONS = {
         "en": "Configure the ore and process in the sidebar, then click Run."},
     "err_add_phase": {"fr": "Ajoutez au moins une phase minerale (proportion > 0).",
                       "en": "Add at least one mineral phase (proportion > 0)."},
-    "err_define_mineral": {"fr": "Definissez au moins un mineral avec une proportion > 0.",
+    "err_define_mineral": {"fr": "Définissez au moins un minéral avec une proportion > 0.",
                            "en": "Define at least one mineral with a proportion > 0."},
                            "cut_mode": {"fr": "Mode de reglage", "en": "Setting mode"},
-    "cut_mode_machine": {"fr": "Reglages machine", "en": "Machine settings"},
+    "cut_mode_machine": {"fr": "Réglages machine", "en": "Machine settings"},
     "cut_mode_direct": {"fr": "Coupure directe (d50/Ep)", "en": "Direct cut (d50/Ep)"},
     "d50_label": {"fr": "d50 - densite de coupure", "en": "d50 - cut density"},
-    "ep_label": {"fr": "Ep - nettete de coupure", "en": "Ep - cut sharpness"},
+    "ep_label": {"fr": "Ep - netteté de coupure", "en": "Ep - cut sharpness"},
    "add_phase_title": {"fr": "Ajouter une phase", "en": "Add a phase"},
     "add_phase_select": {"fr": "Choisir une phase de la base", "en": "Choose a phase from the base"},
     "add_phase_other": {"fr": "Autre (saisie libre)", "en": "Other (free entry)"},
@@ -304,23 +304,23 @@ TRANSLATIONS = {
     "perf_mass_recovery": {"fr": "Recuperation massique (%)", "en": "Mass recovery (%)"},
     "perf_grade": {"fr": "Teneur {el} ({u})", "en": "{el} grade ({u})"},
     "perf_metal_recovery": {"fr": "Recuperation {el} (%)", "en": "{el} recovery (%)"},
-    "xrf_col_element": {"fr": "Element", "en": "Element"},
+    "xrf_col_element": {"fr": "Elément", "en": "Element"},
     "xrf_col_grade": {"fr": "Teneur (%)", "en": "Grade (%)"},
 
-    "meb_section": {"fr": "MEB - liberation mesuree", "en": "SEM - measured liberation"},
-    "meb_caption": {"fr": "Optionnel : chargez le degre de liberation mesure par mineral (remplace celui derive du P80). Les associations sont collectees pour une exploitation future.",
+    "meb_section": {"fr": "MEB-libération mesurée", "en": "SEM - measured liberation"},
+    "meb_caption": {"fr": "Optionnel : chargez le degre de libération mesurée par minéral (remplace celui derive du P80). Les associations sont collectees pour une exploitation future.",
                     "en": "Optional: load the measured liberation degree per mineral (replaces the P80-derived one). Associations are collected for future use."},
     "meb_mode_label": {"fr": "Source MEB", "en": "SEM source"},
     "meb_none": {"fr": "Aucune", "en": "None"},
     "meb_manual": {"fr": "Saisie manuelle", "en": "Manual entry"},
     "meb_csv": {"fr": "Fichier CSV", "en": "CSV file"},
-    "meb_col_lib": {"fr": "Liberation (0-1)", "en": "Liberation (0-1)"},
-    "meb_col_assoc": {"fr": "Association (a venir)", "en": "Association (upcoming)"},
-    "meb_loaded_info": {"fr": "Liberation MEB : {n} mineraux (remplace le P80-derive).",
-                        "en": "SEM liberation: {n} minerals (replaces P80-derived)."},
-    "meb_assoc_note": {"fr": "Associations collectees : elles seront exploitees par les separations dans une version future (modele par associations).",
+    "meb_col_lib": {"fr": "Libération (0-1)", "en": "Liberation (0-1)"},
+    "meb_col_assoc": {"fr": "Association", "en": "Association"},
+    "meb_loaded_info": {"fr": "Libération MEB : {n} mineraux (remplace le P80-derive).",
+                        "en": "SEM libération: {n} minerals (replaces P80-derived)."},
+    "meb_assoc_note": {"fr": "Associations collectées : elles seront exploitees par les separations dans une version future (modele par associations).",
                        "en": "Associations collected: they will influence separations in a future version (association-based model)."},
-    "meb_csv_caption": {"fr": "Colonnes : Mineral, Liberation (0-1), Association (optionnelle).",
+    "meb_csv_caption": {"fr": "Colonnes : Minéral, Libération (0-1), Association (optionnelle).",
                         "en": "Columns: Mineral, Liberation (0-1), Association (optional)."},
     "meb_template": {"fr": "Modele MEB (CSV)", "en": "SEM template (CSV)"},
     "meb_upload": {"fr": "Charger un MEB (CSV)", "en": "Load SEM (CSV)"},
@@ -343,8 +343,9 @@ TRANSLATIONS = {
     "col_stage_name": {"fr": "Nom de l'étage", "en": "Stage name"},
     "col_collector_gpt": {"fr": "Collecteur (g/t)", "en": "Collector (g/t)"},
     "col_pulp_ph": {"fr": "pH de pulpe", "en": "Pulp pH"},
-    "col_depressed": {"fr": "Mineraux déprimés", "en": "Depressed minerals"},
-    "col_activated": {"fr": "Mineraux activés", "en": "Activated minerals"},
+    "col_depressed": {"fr": "Minéraux déprimés", "en": "Depressed minerals"},
+    "col_activated": {"fr": "Minéraux activés", "en": "Activated minerals"},
+    "f80": {"fr": "F80 - alimentation (um)", "en": "F80 - feed (um)"},
 }
 # ============================================================================
 # Libelles des parametres machine, car les cles techniques
@@ -352,7 +353,7 @@ TRANSLATIONS = {
 PARAM_LABELS = {
     # Shaking table
     "deck_slope_deg": {"fr": "Pente de la table (deg)", "en": "Deck slope (deg)"},
-    "stroke_freq_hz": {"fr": "Frequence de rotation (Hz)", "en": "Rotation frequency (Hz)"},
+    "stroke_freq_hz": {"fr": "Fréquence de rotation (Hz)", "en": "Rotation frequency (Hz)"},
     "wash_water_lpm": {"fr": "Eau de lavage (lpm)", "en": "Washing water (lpm)"},
     # Spiral
     "feed_rate_tph": {"fr": "Debit d'alimentation (t/h)", "en": "Feed rate (t/h)"},
@@ -381,7 +382,7 @@ PARAM_LABELS = {
     "pct_solids": {"fr": "% solides (densite de pulpe)", "en": "% solids (pulp density)"},  
     "filling_pct": {"fr": "Taux de remplissage en boulets Jb (%)", "en": "Ball filling Jb (%)"},
     "comblement_u": {"fr": "Comblement interstitiel U", "en": "Interstitial filling U"},
-    "modele_broyage": {"fr": "Modele de broyage", "en": "Grinding model"},
+    "modele_broyage": {"fr": "Modèle de broyage", "en": "Grinding model"},
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).
@@ -390,14 +391,14 @@ OPTION_LABELS = {
     "xanthate_SIBX": {"fr": "Xanthate (direct)", "en": "Xanthate (direct)"},
     "amine_inverse": {"fr": "Amine (inverse)", "en": "Amine (inverse)"},
     # Mode de separation magnetique
-    "LIMS_wet": {"fr": "Basse intensite, voie humide", "en": "Low intensity, wet"},
-    "LIMS_dry": {"fr": "Basse intensite, voie seche", "en": "Low intensity, dry"},
-    "WHIMS_wet": {"fr": "Haute intensite, voie humide", "en": "High intensity, wet"},
-    "WHIMS_dry": {"fr": "Haute intensite, voie seche", "en": "High intensity, dry"},
+    "LIMS_wet": {"fr": "Basse intensité, voie humide", "en": "Low intensity, wet"},
+    "LIMS_dry": {"fr": "Basse intensité, voie sèche", "en": "Low intensity, dry"},
+    "WHIMS_wet": {"fr": "Haute intensité, voie humide", "en": "High intensity, wet"},
+    "WHIMS_dry": {"fr": "Haute intensité, voie sèche", "en": "High intensity, dry"},
     "overflow": {"fr": "Surverse (fins)", "en": "Overflow (fines)"},
     "underflow": {"fr": "Sousverse (grossiers)", "en": "Underflow (coarse)"},
     "humide": {"fr": "Voie humide", "en": "Wet"},
-    "sec": {"fr": "Voie seche", "en": "Dry"},
+    "sec": {"fr": "Voie sèche", "en": "Dry"},
     "bond": {"fr": "Loi de Bond", "en": "Bond's law"},
     "population": {"fr": "Distribution de boulets", "en": "Ball size distribution"},
 }
@@ -414,9 +415,9 @@ ROUTE_LABELS = {
 PROFILE_LABELS = {
     "iron_flotation": {"fr": "Fer (flottation)", "en": "Iron (flotation)"},
     "iron_flotation_vale": {"fr": "Fer type Vale (flottation inverse)", "en": "Vale-type iron (reverse flotation)"},
-    "polymetallic_refractory_au": {"fr": "Or refractaire polymetallique", "en": "Polymetallic refractory gold"},
-    "polymetallic_pb_cu_zn": {"fr": "Polymetallique Pb-Cu-Zn", "en": "Polymetallic Pb-Cu-Zn"},
-    "polymetallic_au_cu_zn_pb": {"fr": "Polymetallique aurifere Au-Cu-Zn-Pb", "en": "Gold-bearing polymetallic Au-Cu-Zn-Pb"},
+    "polymetallic_refractory_au": {"fr": "Or refractaire polymétallique", "en": "Polymetallic refractory gold"},
+    "polymetallic_pb_cu_zn": {"fr": "Polymétallique Pb-Cu-Zn", "en": "Polymetallic Pb-Cu-Zn"},
+    "polymetallic_au_cu_zn_pb": {"fr": "Polymétallique aurifère Au-Cu-Zn-Pb", "en": "Gold-bearing polymetallic Au-Cu-Zn-Pb"},
 }
 
 def route_label(route, lang="fr"):

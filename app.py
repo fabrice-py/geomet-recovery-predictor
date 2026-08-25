@@ -48,6 +48,17 @@ def _normalize_name(name):
                 if unicodedata.category(c) != "Mn")
     return s
 
+def adaptive_step(vmin, vmax):
+    """Pas de saisie adapte a l'etendue de la plage, car un champ de saisie a grande plage
+    (energie, F80) merite un pas grossier tandis qu'une petite plage (pH, comblement) merite
+    un pas fin : ainsi la saisie reste pratique quelle que soit l'echelle du parametre."""
+    etendue = float(vmax) - float(vmin)
+    if etendue <= 5.0:
+        return 0.1
+    if etendue <= 100.0:
+        return 1.0
+    return 10.0
+
 # Table de correspondance nom normalise -> cle technique de la base, construite une fois.
 _MINERAL_LOOKUP = {_normalize_name(k): k for k in MINERALS.keys()}
 
@@ -245,15 +256,36 @@ def plot_psd(grid, psd, p80, mode, lang):
         ax.axhline(80, color="gray", linestyle="--", linewidth=1)
         ax.axvline(p80, color="gray", linestyle="--", linewidth=1)
         ax.set_xscale("log")
+        # Recadrage de l'axe X sur la plage utile, car les longs plateaux (0% cote grossier,
+        # 100% cote fin) n'apportent rien : ainsi on limite l'axe aux tailles de grille reellement
+        # concernees par de la matiere, sans toucher aux donnees (lecture du P80 preservee).
+        seuil_c = 0.001
+        # On borne sur les tailles de GRILLE (len = len(grid)) ou il reste de la masse au-dessus
+        # ou en dessous : une taille de grille est "utile" si de la matiere existe autour d'elle.
+        tailles_utiles = [grid[k] for k in range(len(grid))
+                          if sum(psd[k + 1:]) > seuil_c and sum(psd[k + 1:]) < 1.0 - seuil_c]
+        if tailles_utiles:
+            ax.set_xlim(min(tailles_utiles) / 1.5, max(tailles_utiles) * 1.5)
         ax.set_xlabel(t("psd_size_axis", lang))
         ax.set_ylabel(t("psd_passing_axis", lang))
         ax.set_title(t("psd_cum_title", lang, p80=p80))
     else:
-        # Histogramme frequentiel : % de masse par classe.
-        pct = [x * 100.0 for x in psd]
-        ax.bar(range(len(labels)), pct, color="#c0392b")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+        # Histogramme frequentiel : % de masse par classe. Recadrage automatique sur les classes
+        # REELLEMENT peuplees, car les classes vides (grosses tailles apres broyage fin, ou fines
+        # absentes d'une alimentation grossiere) n'apportent aucune information et ecrasent la
+        # partie utile : ainsi on rogne aux deux bouts en gardant une classe de marge.
+        seuil = 0.001   # 0.1% : en dessous, la barre est invisible a l'oeil.
+        peuplees = [k for k in range(len(psd)) if psd[k] > seuil]
+        if peuplees:
+            i_min = max(0, peuplees[0] - 1)               # une classe de marge cote grossier
+            i_max = min(len(psd) - 1, peuplees[-1] + 1)   # une classe de marge cote fin
+        else:
+            i_min, i_max = 0, len(psd) - 1                # tout vide (cas limite) : garder tout
+        pct = [x * 100.0 for x in psd[i_min:i_max + 1]]
+        sub_labels = labels[i_min:i_max + 1]
+        ax.bar(range(len(sub_labels)), pct, color="#c0392b")
+        ax.set_xticks(range(len(sub_labels)))
+        ax.set_xticklabels(sub_labels, rotation=45, ha="right", fontsize=8)
         ax.set_xlabel(t("psd_class_axis", lang))
         ax.set_ylabel(t("psd_massfrac_axis", lang))
         ax.set_title(t("psd_freq_title", lang, p80=p80))
@@ -284,7 +316,7 @@ elif mode_minerai == t("mode_base", lang):
     st.sidebar.markdown("**" + t("compose_base", lang) + "**")
     custom_modal = {}
     for mineral in MINERALS.keys():
-        pct = st.sidebar.slider(mineral, 0.0, 100.0, 0.0, step=0.5)
+        pct = st.sidebar.number_input(mineral, min_value=0.0, max_value=100.0, value=0.0, step=0.5)
         if pct > 0:
             custom_modal[mineral] = pct
     total_saisi = sum(custom_modal.values())
@@ -299,7 +331,8 @@ else:
     st.sidebar.markdown("**" + t("custom_minerals_label", lang) + "**")
     st.sidebar.caption(t("custom_minerals_caption", lang))
 
-p80 = st.sidebar.slider(t("p80", lang), 10.0, 300.0, 150.0, step=5.0)
+p80 = st.sidebar.number_input(t("f80", lang), min_value=10.0, max_value=3000.0,
+                              value=150.0, step=10.0)
 
 # ============================ SIDEBAR : METAL D'INTERET ============================
 st.sidebar.header(t("metal_header", lang))
@@ -339,8 +372,10 @@ if not is_circuit and not is_multi:
 
     if cut_mode == "direct":
         # Coupure imposee : l'utilisateur fixe d50 (densite de partage) et Ep (nettete).
-        direct_d50 = st.sidebar.slider(t("d50_label", lang), 1.5, 20.0, 5.0, step=0.1)
-        direct_ep = st.sidebar.slider(t("ep_label", lang), 0.05, 1.0, 0.35, step=0.05)
+        direct_d50 = st.sidebar.number_input(t("d50_label", lang), min_value=1.5,
+                                             max_value=20.0, value=5.0, step=0.1)
+        direct_ep = st.sidebar.number_input(t("ep_label", lang), min_value=0.05,
+                                            max_value=1.0, value=0.35, step=0.05)
     else:
         for param, rule in SEPARATION_SPECS[unit_type].items():
             if param.startswith("_"):
@@ -353,8 +388,10 @@ if not is_circuit and not is_multi:
                 picked = st.sidebar.selectbox(label, options=display, index=idx)
                 settings[param] = choices[display.index(picked)]
             elif "min" in rule:
-                settings[param] = st.sidebar.slider(
-                    label, float(rule["min"]), float(rule["max"]), float(rule["default"]))
+                vmin, vmax = float(rule["min"]), float(rule["max"])
+                settings[param] = st.sidebar.number_input(
+                    label, min_value=vmin, max_value=vmax,
+                    value=float(rule["default"]), step=adaptive_step(vmin, vmax))
 else:
     st.sidebar.subheader(t("circuit_composed", lang))
     template_name = st.sidebar.selectbox(t("start_from_template", lang),
@@ -869,22 +906,30 @@ if is_multi:
             # se fait par etage.
             metals = ["Fe", "Cu", "Zn", "Pb", "SiO2", "Au", "Ag", "Sn", "Ni", "Co", "As", "S"]
             metal_i = st.selectbox(t("metal_followed", lang), options=metals, key=f"ms_metal_{i}")
-            # Reglages de la voie choisie, generes depuis SEPARATION_SPECS.
+            # Reglages de la voie choisie, generes depuis SEPARATION_SPECS, disposes par rangees
+            # de 4 colonnes pour une interface compacte (ergonomie) : ainsi les parametres
+            # simples tiennent sur une ligne au lieu de s'empiler verticalement.
             settings_i = {}
-            for param, rule in SEPARATION_SPECS[unit_type_i].items():
-                if param.startswith("_"):
-                    continue
-                label = param_label(param, lang)
-                if "choices" in rule:
-                    choices = rule["choices"]
-                    disp = [option_label(c, lang) for c in choices]
-                    idx = choices.index(rule["default"])
-                    pick = st.selectbox(label, options=disp, index=idx, key=f"ms_{i}_{param}")
-                    settings_i[param] = choices[disp.index(pick)]
-                elif "min" in rule:
-                    settings_i[param] = st.slider(
-                        label, float(rule["min"]), float(rule["max"]),
-                        float(rule["default"]), key=f"ms_{i}_{param}")
+            simple_params = [(p, r) for p, r in SEPARATION_SPECS[unit_type_i].items()
+                             if not p.startswith("_") and ("choices" in r or "min" in r)]
+            for row_start in range(0, len(simple_params), 4):
+                cols = st.columns(4)
+                for col_idx, (param, rule) in enumerate(simple_params[row_start:row_start + 4]):
+                    with cols[col_idx]:
+                        label = param_label(param, lang)
+                        if "choices" in rule:
+                            choices = rule["choices"]
+                            disp = [option_label(c, lang) for c in choices]
+                            idx = choices.index(rule["default"])
+                            pick = st.selectbox(label, options=disp, index=idx,
+                                                key=f"ms_{i}_{param}")
+                            settings_i[param] = choices[disp.index(pick)]
+                        elif "min" in rule:
+                            vmin, vmax = float(rule["min"]), float(rule["max"])
+                            settings_i[param] = st.number_input(
+                                label, min_value=vmin, max_value=vmax,
+                                value=float(rule["default"]),
+                                step=adaptive_step(vmin, vmax), key=f"ms_{i}_{param}")
             # Distribution de boulets : tableau dedie, affiche seulement pour un broyeur en mode
             # "population", car la charge de boulets faconne la PSD dans ce modele : ainsi
             # l'utilisateur compose ses tailles de boulets et leurs proportions.
