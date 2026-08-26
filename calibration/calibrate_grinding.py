@@ -5,6 +5,24 @@ fait tourner le modele de broyage aux memes conditions, et affiche l'ecart de de
 entre le P50 predit et le x50 mesure. L'optimiseur (ajustement des constantes) viendra
 en brique 2.
 """
+# ==========================================================================================
+# ENSEIGNEMENTS DE CALIBRATION (jeux de test, voie seche - resultats indicatifs)
+# ------------------------------------------------------------------------------------------
+# 1. Coke (Colorado-Arango 2021) : RMSE 63% -> 27%. Test d'infrastructure. Confirme que le
+#    modele broie et que l'optimiseur (evolution differentielle) cale k_temps, SEL_ALPHA,
+#    SEL_K_MU. k_temps calé ~8 pas/min (le modele broyait trop vite au depart).
+# 2. Petrakis 2017 (marbre, quartz) : SEL_LAMBDA du modele (3.0) proche des Lambda publies
+#    (3.15-3.36) ; SEL_ALPHA (1.0) dans la plage publiee (0.90-1.15) ; SEL_K_MU depend du
+#    materiau (0.083 quartz, 0.146 marbre) -> justifie les presets par materiau.
+# 3. Penouta (Nava 2020, Sn-Ta-Nb) : calage direct sur Si mesure, RMSE 84% -> 30%.
+#    SEL_ALPHA cale (~0.55) coherent avec alpha publie Penouta (0.41-0.63). MAIS le tableau
+#    point par point revele une LIMITE : l'effet de la taille de boulet est plus faible dans
+#    les donnees que dans le modele (mu proportionnel au boulet est trop fort), et un gros
+#    boulet (31.75 mm) casse MOINS bien les grosses particules que les boulets moyens - effet
+#    "nombre de boulets" (a masse egale, gros boulet = moins de chocs) non capture par
+#    selection_by_ball (teste boulet par boulet). Piste de raffinement futur du modele boulet.
+# ==========================================================================================
+
 import sys
 import os
 import csv
@@ -197,6 +215,78 @@ def comparer_params_publies(chemin_csv):
     print("Lecture : alpha et Lambda se comparent directement aux constantes du modele ;")
     print("SEL_K_MU_impl est la valeur qui reproduirait le mu publie pour ce couple materiau/U.")
 
+def calibrer_sur_Si(chemin_csv):
+    """Cale la fonction de selection (SEL_ALPHA, SEL_K_MU, SEL_LAMBDA) directement sur des taux
+    specifiques de rupture Si MESURES (Penouta, Nava 2020), car ces donnees donnent Si point par
+    point pour plusieurs tailles et boulets : ainsi on cale la FORME de selection sans passer par
+    une simulation temporelle (plus direct et rigoureux que le calage sur P50).
+    Le Si mesure inclut alphaT (echelle absolue) que la fonction du modele ne porte pas ; on
+    ajoute donc un facteur d'echelle alphaT libre, cale conjointement avec la forme."""
+    from scipy.optimize import differential_evolution
+    donnees = charger_csv(chemin_csv)
+
+    # Points observes : (x_um, boulet_mm, Si_mesure).
+    obs = [(float(r["feed_size_upper_um"]), float(r["ball_diameter_mm"]),
+            float(r["specific_rate_breakage_Si_min^-1"])) for r in donnees]
+
+    def cout(params):
+        alpha, k_mu, lam, alphaT = params
+        # On pose temporairement les constantes de forme, on calcule le Si modele = alphaT * forme.
+        a0, k0, l0 = pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA
+        try:
+            pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA = alpha, k_mu, lam
+            err = 0.0
+            for x, b, si_mes in obs:
+                si_mod = alphaT * pg.selection_by_ball(x, b)
+                # Erreur relative, car les Si couvrent un large domaine (0.04 a 0.76) : ainsi
+                # chaque point pese equitablement quelle que soit son amplitude.
+                err += ((si_mod - si_mes) / si_mes) ** 2
+            return (err / len(obs)) ** 0.5 * 100.0   # RMSE relatif en %
+        finally:
+            pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA = a0, k0, l0
+
+    # Bornes elargies, car un calage precedent voyait Lambda et K_MU buter sur leurs bornes :
+    # ainsi on laisse l'optimiseur atteindre son vrai optimum (Lambda plus bas = plafond plus
+    # doux ; K_MU plus haut = taille critique plus grande, ce que suggerent les donnees Penouta
+    # ou le Si croit jusqu'aux grosses tailles).
+    bornes = [(0.3, 2.0), (0.02, 0.30), (1.0, 5.0), (1e-6, 1e-2)]
+
+    rmse_depart = cout([pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA, 1e-4])
+    res = differential_evolution(cout, bornes, maxiter=40, popsize=15, seed=42,
+                                 tol=0.01, polish=True)
+    alpha_o, kmu_o, lam_o, aT_o = res.x
+
+    print("=== CALAGE SUR Si MESURE (Penouta, Nava 2020) ===")
+    print(f"Points : {len(obs)} (7 tailles x 3 boulets, 75% Nc, voie seche, minerai Sn-Ta-Nb)")
+    print(f"RMSE depart (constantes actuelles) : {rmse_depart:.1f}%")
+    print(f"RMSE apres calage                  : {res.fun:.1f}%")
+    print()
+    print("Parametres de forme cales :")
+    print(f"  SEL_ALPHA  : {alpha_o:.3f}   (actuel {pg.SEL_ALPHA})")
+    print(f"  SEL_K_MU   : {kmu_o:.4f}   (actuel {pg.SEL_K_MU})")
+    print(f"  SEL_LAMBDA : {lam_o:.3f}   (actuel {pg.SEL_LAMBDA})")
+    print(f"  alphaT (echelle) : {aT_o:.2e} min^-1")
+    print()
+    # Comparaison point par point, car un RMSE global cache OU le modele colle et OU il devie :
+    # ainsi on voit la qualite du fit taille par taille et boulet par boulet.
+    print()
+    print("Comparaison point par point (Si mesure vs modele cale) :")
+    print(f"{'boulet':>7} {'taille':>7} {'Si_mes':>8} {'Si_mod':>8} {'ecart%':>8}")
+    print("-" * 42)
+    a0, k0, l0 = pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA
+    try:
+        pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA = alpha_o, kmu_o, lam_o
+        for x, b, si_mes in obs:
+            si_mod = aT_o * pg.selection_by_ball(x, b)
+            ecart = 100.0 * (si_mod - si_mes) / si_mes
+            print(f"{b:>7.2f} {x:>7.0f} {si_mes:>8.3f} {si_mod:>8.3f} {ecart:>+8.1f}")
+    finally:
+        pg.SEL_ALPHA, pg.SEL_K_MU, pg.SEL_LAMBDA = a0, k0, l0
+    print("-" * 42)
+    print("NB : voie seche, minerai Sn-Ta-Nb specifique. Cale la FORME de selection, pas la")
+    print("     fonction de rupture B (non identifiable sans PSD-a-temps).")
+    return {"SEL_ALPHA": alpha_o, "SEL_K_MU": kmu_o, "SEL_LAMBDA": lam_o, "alphaT": aT_o}
+
 if __name__ == "__main__":
     chemin = os.path.join(_RACINE, "calibration", "data", "grinding_coke_2021.csv")
     print("--- Ecart de depart (avant calibration) ---")
@@ -207,3 +297,6 @@ if __name__ == "__main__":
     chemin_petrakis = os.path.join(_RACINE, "calibration", "data",
                                    "selection_params_2017.csv")
     comparer_params_publies(chemin_petrakis)
+    print()
+    chemin_si = os.path.join(_RACINE, "calibration", "data", "penouta_long_Si_75Nc.csv")
+    calibrer_sur_Si(chemin_si)

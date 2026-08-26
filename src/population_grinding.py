@@ -56,7 +56,23 @@ SEL_ALPHA = 1.0        # exposant de taille : la selection croit ~ x^alpha pour 
 SEL_LAMBDA = 3.0       # raideur du plafonnement pour les grosses particules.
 SEL_K_MU = 0.05        # taille critique de particule / taille de boulet (mm) : un boulet casse
                        # bien jusqu'a ~1/20 de son diametre. mu(um) = SEL_K_MU * d(mm) * 1000.
-
+# Vitesse de broyage relative du materiau actif (quartz = reference 1.0), posee par
+# apply_material_preset. Vaut 1.0 par defaut, car sans preset choisi le broyage garde son
+# comportement de reference.
+MATERIAL_VITESSE_REL = 1.0
+# vitesse_rel : facteur de vitesse de broyage relatif au quartz (reference = 1.0), car la
+# vitesse globale (alphaT chez Petrakis) depend fortement du materiau (le marbre tendre broie
+# ~1.9x plus vite que le quartz dur a temps egal) : ainsi le preset porte la FORME (alpha, mu,
+# Lambda) ET la VITESSE. vitesse_rel = alphaT_materiau / alphaT_quartz (Petrakis 2017, U=50%,
+# boulet 25.4 mm : marbre 0.87, quartz 0.46 min^-1). Coke : alphaT non publie -> 1.0 (indetermine).
+MATERIAL_PRESETS = {
+    "marbre": {"SEL_ALPHA": 0.92, "SEL_LAMBDA": 3.35, "SEL_K_MU": 0.146,
+               "vitesse_rel": 1.89, "source": "Petrakis 2017 (publie)"},
+    "quartz": {"SEL_ALPHA": 1.15, "SEL_LAMBDA": 3.15, "SEL_K_MU": 0.083,
+               "vitesse_rel": 1.00, "source": "Petrakis 2017 (publie, reference)"},
+    "coke":   {"SEL_ALPHA": 1.50, "SEL_LAMBDA": 3.00, "SEL_K_MU": 0.031,
+               "vitesse_rel": 1.00, "source": "Colorado-Arango 2021 (cale ; vitesse indeterminee)"},
+}
 
 def selection_by_ball(x_um, ball_mm):
     """Vitesse de cassure (selection) d'une particule de taille x_um par un boulet de diametre
@@ -71,6 +87,20 @@ def selection_by_ball(x_um, ball_mm):
     plafond = 1.0 / (1.0 + (x_um / mu_um) ** SEL_LAMBDA)   # chute au-dela de mu
     return croissance * plafond
 
+def apply_material_preset(nom):
+    """Applique un preset de materiau en posant les constantes globales de selection, car ces
+    constantes gouvernent la vitesse et la forme du broyage : ainsi choisir un materiau change
+    le comportement (un marbre broie plus vite qu'un quartz). Modifie les globales du module ;
+    renvoie le dict applique. Leve une erreur si le materiau est inconnu."""
+    global SEL_ALPHA, SEL_LAMBDA, SEL_K_MU, MATERIAL_VITESSE_REL
+    if nom not in MATERIAL_PRESETS:
+        raise ValueError(f"Materiau inconnu : {nom}. Choix : {list(MATERIAL_PRESETS)}")
+    preset = MATERIAL_PRESETS[nom]
+    SEL_ALPHA = preset["SEL_ALPHA"]
+    SEL_LAMBDA = preset["SEL_LAMBDA"]
+    SEL_K_MU = preset["SEL_K_MU"]
+    MATERIAL_VITESSE_REL = preset["vitesse_rel"]
+    return preset
 
 def selection_total(x_um, distribution):
     """Selection TOTALE d'une particule de taille x_um par la charge de boulets DISTRIBUEE, car
@@ -218,11 +248,16 @@ def grind_psd_energy_based(psd, sizes, grid, distribution, p80_bond,
     from size_classes import p80_from_psd
     # 1) Calibrer le nombre de pas sur une charge de reference (= l'energie de Bond).
     n_steps = calibrate_steps_for_bond(psd, sizes, grid, p80_bond, reference_distribution, delta)
-    # 2) Appliquer ce meme nombre de pas avec la charge REELLE.
+    # 2) Moduler par la vitesse de broyage du materiau, car a energie de Bond egale un materiau
+    # tendre (marbre) se reduit davantage qu'un materiau dur (quartz) : ainsi vitesse_rel etire
+    # ou reduit le nombre de pas effectifs. Reference quartz = 1.0. La vitesse est portee par la
+    # variable de module MATERIAL_VITESSE_REL, posee par apply_material_preset.
+    n_effectif = max(1, int(round(n_steps * MATERIAL_VITESSE_REL)))
+    # 3) Appliquer avec la charge REELLE.
     current = list(psd)
-    for _ in range(n_steps):
+    for _ in range(n_effectif):
         current = grinding_step(current, sizes, distribution, delta)
-    return current, round(p80_from_psd(grid, current), 1), n_steps
+    return current, round(p80_from_psd(grid, current), 1), n_effectif
 
 # --- Piste B (option 1) : forme des fragments dependante des boulets qui cassent chaque classe ---
 
@@ -233,6 +268,7 @@ PHI_MIN = 0.30     # gros boulets : peu de poids au terme fines -> fragments plu
 PHI_MAX = 0.70     # petits boulets : plus de fines.
 BALL_REF_MIN = 15.0    # taille de boulet ou phi = PHI_MAX (petit boulet).
 BALL_REF_MAX = 80.0    # taille de boulet ou phi = PHI_MIN (gros boulet).
+
 
 
 def effective_ball_size(x_um, distribution):
@@ -279,3 +315,4 @@ def breakage_fraction_ball(i, j, sizes, distribution):
     haut = sizes[i - 1] if i - 1 >= 0 else sizes[0]
     bas = sizes[i]
     return breakage_cumulative_ball(haut, x_j, phi) - breakage_cumulative_ball(bas, x_j, phi)
+
