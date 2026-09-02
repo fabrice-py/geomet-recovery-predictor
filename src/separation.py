@@ -68,6 +68,8 @@ SEPARATION_SPECS = {
         "filling_pct": {"min": 20.0, "max": 50.0, "default": 37.0},
         "comblement_u": {"min": 0.4, "max": 1.6, "default": 1.0},
         "modele_broyage": {"choices": ["bond", "population"], "default": "bond"},
+        "materiau": {"choices": ["personnalise", "marbre", "quartz", "coke"],
+                     "default": "personnalise"},
     },
         "hydrocyclone": {
         "diameter_cm": {"min": 5.0, "max": 50.0, "default": 15.0},

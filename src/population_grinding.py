@@ -60,19 +60,31 @@ SEL_K_MU = 0.05        # taille critique de particule / taille de boulet (mm) : 
 # apply_material_preset. Vaut 1.0 par defaut, car sans preset choisi le broyage garde son
 # comportement de reference.
 MATERIAL_VITESSE_REL = 1.0
-# vitesse_rel : facteur de vitesse de broyage relatif au quartz (reference = 1.0), car la
-# vitesse globale (alphaT chez Petrakis) depend fortement du materiau (le marbre tendre broie
-# ~1.9x plus vite que le quartz dur a temps egal) : ainsi le preset porte la FORME (alpha, mu,
-# Lambda) ET la VITESSE. vitesse_rel = alphaT_materiau / alphaT_quartz (Petrakis 2017, U=50%,
-# boulet 25.4 mm : marbre 0.87, quartz 0.46 min^-1). Coke : alphaT non publie -> 1.0 (indetermine).
+# work_index : Bond Work Index (kWh/t), la broyabilite (durete) du materiau, car en mode Bond
+# c'est le Wi qui porte la durete : ainsi choisir un materiau agit de façon coherente sur les
+# DEUX modes (Bond via Wi, population via SEL_* et vitesse). SOURCES Wi :
+#   - marbre : ~11 kWh/t, proxy calcaire CaCO3 (BICO 10.8 / Sepor 12.2, academia 2022).
+#   - quartz : ~13 kWh/t, BWI standard silice.
+#   - coke : 13 kWh/t = defaut neutre (pas de BWI standard publie trouve pour le coke) -> indicatif.
 MATERIAL_PRESETS = {
     "marbre": {"SEL_ALPHA": 0.92, "SEL_LAMBDA": 3.35, "SEL_K_MU": 0.146,
-               "vitesse_rel": 1.89, "source": "Petrakis 2017 (publie)"},
+               "vitesse_rel": 1.89, "work_index": 11.0,
+               "source": "Petrakis 2017 (forme) ; Wi proxy calcaire"},
     "quartz": {"SEL_ALPHA": 1.15, "SEL_LAMBDA": 3.15, "SEL_K_MU": 0.083,
-               "vitesse_rel": 1.00, "source": "Petrakis 2017 (publie, reference)"},
+               "vitesse_rel": 1.00, "work_index": 13.0,
+               "source": "Petrakis 2017 (forme, reference) ; Wi BWI silice"},
     "coke":   {"SEL_ALPHA": 1.50, "SEL_LAMBDA": 3.00, "SEL_K_MU": 0.031,
-               "vitesse_rel": 1.00, "source": "Colorado-Arango 2021 (cale ; vitesse indeterminee)"},
+               "vitesse_rel": 1.00, "work_index": None,
+               "source": "Colorado-Arango 2021 (forme cale) ; Wi non publie -> saisi par l'utilisateur"},
 }
+
+def material_work_index(nom):
+    """Renvoie le Bond Work Index (kWh/t) du preset materiau, ou None si 'personnalise' ou
+    inconnu, car en mode preset le materiau impose sa durete (le Wi du preset ecrase le curseur) :
+    ainsi le broyage Bond reflete la broyabilite du materiau choisi."""
+    if nom in MATERIAL_PRESETS:
+        return MATERIAL_PRESETS[nom].get("work_index")
+    return None
 
 def selection_by_ball(x_um, ball_mm):
     """Vitesse de cassure (selection) d'une particule de taille x_um par un boulet de diametre
@@ -102,6 +114,24 @@ def apply_material_preset(nom):
     MATERIAL_VITESSE_REL = preset["vitesse_rel"]
     return preset
 
+# Sauvegarde des valeurs par defaut des constantes de selection, car appliquer un preset modifie
+# les globales et il faut pouvoir revenir a l'etat "personnalise" (non force) entre deux runs :
+# ainsi on fige les defauts au chargement du module, une seule fois.
+_DEFAULT_SEL_ALPHA = SEL_ALPHA
+_DEFAULT_SEL_LAMBDA = SEL_LAMBDA
+_DEFAULT_SEL_K_MU = SEL_K_MU
+_DEFAULT_VITESSE_REL = MATERIAL_VITESSE_REL
+
+
+def reset_material_defaults():
+    """Restaure les constantes de selection a leurs valeurs par defaut (mode 'personnalise'),
+    car les globales persistent entre appels : ainsi un preset choisi a un run precedent ne
+    reste pas colle si l'utilisateur revient a 'personnalise' ou change de materiau."""
+    global SEL_ALPHA, SEL_LAMBDA, SEL_K_MU, MATERIAL_VITESSE_REL
+    SEL_ALPHA = _DEFAULT_SEL_ALPHA
+    SEL_LAMBDA = _DEFAULT_SEL_LAMBDA
+    SEL_K_MU = _DEFAULT_SEL_K_MU
+    MATERIAL_VITESSE_REL = _DEFAULT_VITESSE_REL
 def selection_total(x_um, distribution):
     """Selection TOTALE d'une particule de taille x_um par la charge de boulets DISTRIBUEE, car
     chaque taille de boulet contribue selon son EFFECTIF (nombre) : ainsi on somme les

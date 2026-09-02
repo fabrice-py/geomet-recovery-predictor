@@ -66,8 +66,23 @@ def run_series(feed, stages, prop_lookup=None, assay_func=None,
         if unit.unit_type == "ball_mill":
             s = unit.settings
             import copy
+            import population_grinding as pg
+            # Application du preset materiau AVANT le broyage, car il pose les constantes de
+            # selection (forme + vitesse) : ainsi le broyage reflete le materiau choisi. Le mode
+            # "personnalise" restaure les valeurs par defaut, pour qu'aucun preset d'un run
+            # precedent ne reste colle (les globales du module persistent entre appels).
+            materiau = s.get("materiau", "personnalise")
+            if materiau != "personnalise":
+                pg.apply_material_preset(materiau)
+            else:
+                pg.reset_material_defaults()
+            # Le Wi du preset ecrase le curseur, car choisir un materiau fixe sa durete (option a) :
+            # ainsi le mode Bond reflete la broyabilite du materiau. En "personnalise", le curseur agit.
+            wi_effectif = pg.material_work_index(materiau)
+            if wi_effectif is None:
+                wi_effectif = s.get("work_index", 15.0)
             ground = copy.deepcopy(current)
-            grind_stream(ground, work_index=s.get("work_index", 15.0),
+            grind_stream(ground, work_index=wi_effectif,
                          energy_kwht=s.get("energy_kwht", 10.0),
                          grid=grid, apply_p80_func=apply_p80_func,
                                                   pct_solids=s.get("pct_solids", 75.0),

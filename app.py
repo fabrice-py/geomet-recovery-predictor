@@ -912,12 +912,38 @@ if is_multi:
             settings_i = {}
             simple_params = [(p, r) for p, r in SEPARATION_SPECS[unit_type_i].items()
                              if not p.startswith("_") and ("choices" in r or "min" in r)]
+            # Pour le broyeur, on place materiau et work_index EN TETE de la liste (dans cet
+            # ordre), car le materiau est le choix amont qui impose la durete (Wi) : ainsi les 8
+            # parametres restent dans la meme grille 4 colonnes, materiau et Wi en premiere ligne.
+            if unit_type_i == "ball_mill":
+                ordre = ["materiau", "work_index"]
+                tete = [(p, dict(SEPARATION_SPECS["ball_mill"][p])) for p in ordre]
+                reste = [(p, r) for p, r in simple_params if p not in ordre]
+                simple_params = tete + reste
             for row_start in range(0, len(simple_params), 4):
                 cols = st.columns(4)
                 for col_idx, (param, rule) in enumerate(simple_params[row_start:row_start + 4]):
                     with cols[col_idx]:
                         label = param_label(param, lang)
-                        if "choices" in rule:
+                        # Cas special du Wi pour un broyeur : grise et cale sur le preset si un
+                        # materiau est choisi (le preset ecrase la saisie), sinon curseur normal.
+                        if unit_type_i == "ball_mill" and param == "work_index":
+                            import population_grinding as pg
+                            wi_preset = pg.material_work_index(settings_i.get("materiau",
+                                                                             "personnalise"))
+                            if wi_preset is not None:
+                                st.number_input(label, value=float(wi_preset), disabled=True,
+                                                key=f"ms_{i}_wi_locked_"
+                                                    f"{settings_i.get('materiau')}",
+                                                help=t("wi_locked_help", lang))
+                                settings_i["work_index"] = wi_preset
+                            else:
+                                vmin, vmax = float(rule["min"]), float(rule["max"])
+                                settings_i["work_index"] = st.number_input(
+                                    label, min_value=vmin, max_value=vmax,
+                                    value=float(rule["default"]),
+                                    step=adaptive_step(vmin, vmax), key=f"ms_{i}_work_index")
+                        elif "choices" in rule:
                             choices = rule["choices"]
                             disp = [option_label(c, lang) for c in choices]
                             idx = choices.index(rule["default"])

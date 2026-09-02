@@ -346,6 +346,7 @@ TRANSLATIONS = {
     "col_depressed": {"fr": "Minéraux déprimés", "en": "Depressed minerals"},
     "col_activated": {"fr": "Minéraux activés", "en": "Activated minerals"},
     "f80": {"fr": "F80 - alimentation (um)", "en": "F80 - feed (um)"},
+    "wi_locked_help": {"fr": "Imposé par le matériau choisi (le preset écrase ce réglage)", "en": "Set by the chosen material (preset overrides this)"},
 }
 # ============================================================================
 # Libelles des parametres machine, car les cles techniques
@@ -380,9 +381,10 @@ PARAM_LABELS = {
     "pressure_kpa": {"fr": "Pression d'alimentation (kPa)", "en": "Feed pressure (kPa)"},
     "continue_flux": {"fr": "Flux qui continue", "en": "Continuing flow"},
     "pct_solids": {"fr": "% solides (densite de pulpe)", "en": "% solids (pulp density)"},  
-    "filling_pct": {"fr": "Taux de remplissage en boulets Jb (%)", "en": "Ball filling Jb (%)"},
+    "filling_pct": {"fr": "Remplissage boulets Jb (%)", "en": "Ball filling Jb (%)"},
     "comblement_u": {"fr": "Comblement interstitiel U", "en": "Interstitial filling U"},
     "modele_broyage": {"fr": "Modèle de broyage", "en": "Grinding model"},
+    "materiau": {"fr": "Matériau (preset de broyage)", "en": "Material (grinding preset)"},
 }
 
 # Libelles des OPTIONS de type de collecteur (les valeurs, pas le parametre).
@@ -401,6 +403,10 @@ OPTION_LABELS = {
     "sec": {"fr": "Voie sèche", "en": "Dry"},
     "bond": {"fr": "Loi de Bond", "en": "Bond's law"},
     "population": {"fr": "Distribution de boulets", "en": "Ball size distribution"},
+    "personnalise": {"fr": "Personnalisé", "en": "Custom"},
+    "marbre": {"fr": "Marbre (tendre)", "en": "Marble (soft)"},
+    "quartz": {"fr": "Quartz (dur)", "en": "Quartz (hard)"},
+    "coke": {"fr": "Coke (cassant)", "en": "Coke (brittle)"},
 }
 
 ROUTE_LABELS = {

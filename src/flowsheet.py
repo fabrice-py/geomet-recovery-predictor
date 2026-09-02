@@ -150,8 +150,21 @@ def apply_node(unit_type, settings, feed_stream, prop_lookup=None, assay_func=No
     from classification import classify_stream
 
     if unit_type == "ball_mill":
+        import population_grinding as pg
+        # Application du preset materiau AVANT le broyage (voir circuit.py pour le detail),
+        # car le moteur graphe est la voie utilisee par l'interface multi-voies : ainsi le
+        # materiau choisi agit aussi dans l'app. "personnalise" restaure les valeurs par defaut.
+        materiau = settings.get("materiau", "personnalise")
+        if materiau != "personnalise":
+            pg.apply_material_preset(materiau)
+        else:
+            pg.reset_material_defaults()
+        # Le Wi du preset ecrase le curseur (voir circuit.py), car le materiau fixe sa durete.
+        wi_effectif = pg.material_work_index(materiau)
+        if wi_effectif is None:
+            wi_effectif = settings.get("work_index", 15.0)
         ground = copy.deepcopy(feed_stream)
-        grind_stream(ground, work_index=settings.get("work_index", 15.0),
+        grind_stream(ground, work_index=wi_effectif,
                      energy_kwht=settings.get("energy_kwht", 10.0),
                      grid=grid, apply_p80_func=apply_p80_func,
                                           pct_solids=settings.get("pct_solids", 75.0),
